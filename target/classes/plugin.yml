@@ -1,0 +1,20 @@
+name: ScoltEconomys
+version: '1.0.1'
+main: me.scoltbr.scoltEconomys.Main
+api-version: '1.21'
+authors: [ ScoltBr ]
+softdepend: [Vault]
+description: Plugin de economia focado em inovação
+commands:
+  money:
+    description: Comando principal de economia.
+    usage: /money
+  eco:
+    description: Comandos administrativos.
+    usage: /eco <...>
+  pay:
+    description: Atalho para /money pay
+    usage: /pay <player> <amount>
+permissions:
+  scolteconomy.admin:
+    default: op

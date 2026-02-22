@@ -1,0 +1,67 @@
+database:
+  host: sd-br4.blazebr.com
+  port: 3306
+  name: s12346_ScoltTestes
+  user: u12346_OyjrFot1gX
+  password: gEKIEX2SrO+NqhQL!62LGc.t
+  use-ssl: false
+
+  pool:
+    max-size: 10
+    min-idle: 2
+    max-lifetime-ms: 1800000
+    connection-timeout-ms: 5000
+
+flush:
+  interval-seconds: 120
+  max-accounts-per-flush: 250
+
+defaults:
+  wallet: 0.0
+  bank: 0.0
+
+tax:
+  transfer:
+    enabled: true
+    rate: 0.03000000000000001 # 2%
+    min-fee: 0.0
+    max-fee: 9999999.0
+  withdraw:
+    enabled: true
+    rate: 0.09999999999999995
+    min-fee: 0.0
+    max-fee: 9.99999999E8
+
+treasury:
+  enabled: true
+  wallet-account: TREASURY # só um identificador lógico (não é player)
+
+audit:
+  enabled: true
+  buffer-size: 5000
+  file:
+    enabled: true
+    path: audit-transactions.log
+
+bank:
+  enabled: true
+  max-balance: 1.0E9
+
+  interest:
+    enabled: true
+    interval-seconds: 600 # 10 min
+    rate: 0.002 # 0.2% por intervalo
+    cap-per-interval: 5000.0 # teto de juros por intervalo
+
+stats:
+  enabled: true
+  interval-seconds: 600 # 10 min
+
+alerts:
+  enabled: true
+  # Crescimento diário (totalCoins) acima disso vira alerta (ex: 0.15 = 15%)
+  growth-high: 0.15
+  # Concentração top10 acima disso vira alerta (ex: 0.70 = 70%)
+  concentration-high: 0.7
+  # Total coins mínimo para começar a alertar (evita falso positivo em servidor vazio)
+  min-total-coins: 100000.0

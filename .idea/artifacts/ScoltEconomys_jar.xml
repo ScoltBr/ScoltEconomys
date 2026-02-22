@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="ScoltEconomys:jar">
+    <output-path>$PROJECT_DIR$/../../../Desktop/Paper1.21/plugins</output-path>
+    <root id="archive" name="ScoltEconomys.jar">
+      <element id="module-output" name="ScoltEconomys" />
+    </root>
+  </artifact>
+</component>
