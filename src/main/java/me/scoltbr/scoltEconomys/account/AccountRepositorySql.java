@@ -72,7 +72,7 @@ public class AccountRepositorySql implements AccountRepository {
     @Override
     public List<TopBalanceRow> topTotal(int limit) {
         String sql = """
-        SELECT uuid, (wallet + bank) AS total
+        SELECT uuid, (wallet_balance + bank_balance) AS total
         FROM se_accounts
         ORDER BY total DESC
         LIMIT ?

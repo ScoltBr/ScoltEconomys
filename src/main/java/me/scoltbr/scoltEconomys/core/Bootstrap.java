@@ -1,4 +1,3 @@
-// src/main/java/me/scoltbr/scoltEconomys/core/Bootstrap.java
 package me.scoltbr.scoltEconomys.core;
 
 import me.scoltbr.scoltEconomys.Main;
@@ -54,14 +53,9 @@ public final class Bootstrap {
     }
 
     public void enable() {
-
-        // 0) Config
-        plugin.saveDefaultConfig();
-
         // 1) Infra
         this.asyncExecutor = new AsyncExecutor(plugin);
         this.tasks = new Tasks(plugin);
-        this.moneyTopService = new me.scoltbr.scoltEconomys.stats.MoneyTopService(plugin, asyncExecutor, accountRepository);
         // 2) Database
         this.databaseManager = new DatabaseManager(plugin);
         this.databaseManager.start();
@@ -70,6 +64,8 @@ public final class Bootstrap {
         // 3) Cache + repo
         this.accountCache = new AccountCache();
         this.accountRepository = new AccountRepositorySql(databaseManager.dataSource());
+        this.moneyTopService = new MoneyTopService(plugin, asyncExecutor, accountRepository);
+
 
         // 4) Services core
         this.treasuryService = new TreasuryService(plugin);
