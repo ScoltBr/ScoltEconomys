@@ -149,17 +149,3 @@ O plugin é dividido em módulos independentes:
 **ScoltBr**\
 Projeto focado em arquitetura de plugins premium e economia escalável
 para Minecraft.
-
-------------------------------------------------------------------------
-
-## 🌍 LinkedIn Description (Copy & Paste)
-
-Desenvolvi o **ScoltEconomy**, um sistema de economia avançado para
-servidores Minecraft (Paper 1.21.11+), com arquitetura modular, MySQL
-assíncrono, Vault API, controle de inflação, GUI administrativa e
-suporte para 300+ jogadores simultâneos.
-
-Tecnologias: Java 21, Paper API, MySQL, HikariCP, Maven, Vault API.
-
-Foco em performance, escalabilidade e boas práticas de engenharia de
-software.
