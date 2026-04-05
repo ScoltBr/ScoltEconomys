@@ -98,5 +98,91 @@ public class AccountRepositorySql implements AccountRepository {
         }
     }
 
+    @Override
+    public java.util.OptionalDouble getWalletBalanceSync(UUID uuid) {
+        String sql = "SELECT wallet_balance FROM se_accounts WHERE uuid = ?";
+        try (var c = ds.getConnection();
+             var ps = c.prepareStatement(sql)) {
+            ps.setString(1, uuid.toString());
+            try (var rs = ps.executeQuery()) {
+                if (!rs.next()) return java.util.OptionalDouble.empty();
+                return java.util.OptionalDouble.of(rs.getDouble("wallet_balance"));
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to get sync wallet balance for " + uuid, e);
+        }
+    }
+
+    @Override
+    public boolean addWalletBalanceSync(UUID uuid, double amount) {
+        String queryBalance = "SELECT wallet_balance FROM se_accounts WHERE uuid = ?";
+        String updateBalance = "UPDATE se_accounts SET wallet_balance = ?, last_update = ? WHERE uuid = ?";
+        try (var c = ds.getConnection()) {
+            c.setAutoCommit(false);
+            try (var ps1 = c.prepareStatement(queryBalance)) {
+                ps1.setString(1, uuid.toString());
+                try (var rs = ps1.executeQuery()) {
+                    if (!rs.next()) {
+                        c.rollback();
+                        return false;
+                    }
+                    double wallet = rs.getDouble("wallet_balance");
+                    if (wallet + amount < 0) {
+                        c.rollback();
+                        return false;
+                    }
+                    try (var ps2 = c.prepareStatement(updateBalance)) {
+                        ps2.setDouble(1, wallet + amount);
+                        ps2.setLong(2, Instant.now().toEpochMilli());
+                        ps2.setString(3, uuid.toString());
+                        ps2.executeUpdate();
+                    }
+                }
+            }
+            c.commit();
+            return true;
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to add sync wallet balance for " + uuid, e);
+        }
+    }
+
+    @Override
+    public GlobalEconomyData getGlobalEconomyData() {
+        String countSql = "SELECT SUM(wallet_balance) AS w, SUM(bank_balance) AS b, COUNT(uuid) AS c FROM se_accounts";
+        
+        double totalWallet = 0;
+        double totalBank = 0;
+        int totalAccs = 0;
+        
+        try (var c = ds.getConnection();
+             var ps = c.prepareStatement(countSql);
+             var rs = ps.executeQuery()) {
+             if (rs.next()) {
+                 totalWallet = rs.getDouble("w");
+                 totalBank = rs.getDouble("b");
+                 totalAccs = rs.getInt("c");
+             }
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to get global economy count", e);
+        }
+        
+        int top10Limit = Math.max(1, totalAccs / 10);
+        double top10Sum = 0;
+        
+        String topSql = "SELECT (wallet_balance + bank_balance) as total FROM se_accounts ORDER BY (wallet_balance + bank_balance) DESC LIMIT ?";
+        try (var c = ds.getConnection();
+             var ps = c.prepareStatement(topSql)) {
+             ps.setInt(1, top10Limit);
+             try (var rs = ps.executeQuery()) {
+                 while (rs.next()) {
+                     top10Sum += rs.getDouble("total");
+                 }
+             }
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to get global top 10 economy", e);
+        }
+        
+        return new GlobalEconomyData(totalWallet, totalBank, totalAccs, top10Sum);
+    }
 
 }

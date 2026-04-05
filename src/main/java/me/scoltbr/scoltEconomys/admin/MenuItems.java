@@ -1,5 +1,7 @@
 package me.scoltbr.scoltEconomys.admin;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Material;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemFlag;
@@ -7,8 +9,12 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
 import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 public final class MenuItems {
+
+    private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacySection();
 
     private MenuItems() {}
 
@@ -16,8 +22,13 @@ public final class MenuItems {
         ItemStack it = new ItemStack(mat);
         ItemMeta meta = it.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName(name);
-            if (lore != null && lore.length > 0) meta.setLore(Arrays.asList(lore));
+            meta.displayName(LEGACY.deserialize(name));
+            if (lore != null && lore.length > 0) {
+                List<Component> loreComponents = Arrays.stream(lore)
+                        .map(LEGACY::deserialize)
+                        .collect(Collectors.toList());
+                meta.lore(loreComponents);
+            }
             meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
             it.setItemMeta(meta);
         }

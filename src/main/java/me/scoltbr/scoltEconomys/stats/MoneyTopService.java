@@ -14,7 +14,7 @@ public final class MoneyTopService {
 
     private final AsyncExecutor async;
     private final AccountRepository repo;
-    private Plugin plugin;
+    private final Plugin plugin;
 
     public MoneyTopService(Plugin plugin, AsyncExecutor async, AccountRepository repo) {
         this.async = async;

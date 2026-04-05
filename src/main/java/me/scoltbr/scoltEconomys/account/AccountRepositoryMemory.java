@@ -39,4 +39,37 @@ public final class AccountRepositoryMemory implements AccountRepository {
                 .limit(limit)
                 .toList();
     }
+
+    @Override
+    public java.util.OptionalDouble getWalletBalanceSync(UUID uuid) {
+        if (!store.containsKey(uuid)) return java.util.OptionalDouble.empty();
+        return java.util.OptionalDouble.of(store.get(uuid).wallet());
+    }
+
+    @Override
+    public boolean addWalletBalanceSync(UUID uuid, double amount) {
+        if (!store.containsKey(uuid)) return false;
+        double current = store.get(uuid).wallet();
+        if (current + amount < 0) return false;
+        store.get(uuid).setWallet(current + amount);
+        return true;
+    }
+
+    @Override
+    public GlobalEconomyData getGlobalEconomyData() {
+        double w = store.values().stream().mapToDouble(PlayerAccount::wallet).sum();
+        double b = store.values().stream().mapToDouble(PlayerAccount::bank).sum();
+        int c = store.size();
+        
+        int topCount = Math.max(1, c / 10);
+        double t10 = store.values().stream()
+                .mapToDouble(acc -> acc.wallet() + acc.bank())
+                .boxed()
+                .sorted(Comparator.reverseOrder())
+                .limit(topCount)
+                .mapToDouble(Double::doubleValue)
+                .sum();
+                
+        return new GlobalEconomyData(w, b, c, t10);
+    }
 }

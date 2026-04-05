@@ -12,7 +12,7 @@ public final class AlertService {
     private final Plugin plugin;
     private final AdminStatsService stats;
 
-    private final Map<AlertType, Alert> active = new EnumMap<>(AlertType.class);
+    private final Map<AlertType, Alert> active = Collections.synchronizedMap(new EnumMap<>(AlertType.class));
 
     public AlertService(Plugin plugin, AdminStatsService stats) {
         this.plugin = plugin;

@@ -1,4 +1,3 @@
-// src/main/java/me/scoltbr/scoltEconomys/command/EcoCommand.java
 package me.scoltbr.scoltEconomys.admin;
 
 import me.scoltbr.scoltEconomys.account.AccountService;
@@ -7,7 +6,6 @@ import me.scoltbr.scoltEconomys.audit.TransactionAuditService;
 import me.scoltbr.scoltEconomys.stats.AdminStatsService;
 import me.scoltbr.scoltEconomys.util.MoneyFormat;
 import me.scoltbr.scoltEconomys.util.MoneyParser;
-import me.scoltbr.scoltEconomys.util.Preconditions;
 import org.bukkit.Bukkit;
 import org.bukkit.command.*;
 import org.bukkit.entity.Player;
@@ -28,12 +26,12 @@ public final class EcoAdminCommand implements CommandExecutor {
     private final AdminMenuService adminMenus;
 
     public EcoAdminCommand(Plugin plugin,
-                      AccountService accounts,
-                      TransactionAuditService audit,
-                      TreasuryService treasury,
-                      AdminStatsService stats,
-                      me.scoltbr.scoltEconomys.alerts.AlertService alerts,
-                      AdminMenuService adminMenus) {
+            AccountService accounts,
+            TransactionAuditService audit,
+            TreasuryService treasury,
+            AdminStatsService stats,
+            me.scoltbr.scoltEconomys.alerts.AlertService alerts,
+            AdminMenuService adminMenus) {
         this.plugin = plugin;
         this.accounts = accounts;
         this.audit = audit;
@@ -61,6 +59,7 @@ public final class EcoAdminCommand implements CommandExecutor {
             case "admin" -> handleAdmin(sender);
             case "alerts" -> handleAlerts(sender);
             case "treasury" -> handleTreasury(sender);
+            case "balance" -> handleBalance(sender, args);
 
             default -> {
                 sendHelp(sender);
@@ -112,6 +111,31 @@ public final class EcoAdminCommand implements CommandExecutor {
         return true;
     }
 
+    private boolean handleBalance(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("scolteconomy.admin")) {
+            sender.sendMessage("§cSem permissão.");
+            return true;
+        }
+        if (args.length < 2) {
+            sender.sendMessage("§cUso: /eco balance <player>");
+            return true;
+        }
+
+        Player target = Bukkit.getPlayerExact(args[1]);
+        if (target == null) {
+            sender.sendMessage("§cJogador não encontrado ou offline.");
+            return true;
+        }
+
+        accounts.getOrLoad(target.getUniqueId(), acc -> {
+            sender.sendMessage("§6§lSaldo de §f" + target.getName());
+            sender.sendMessage("§aCarteira: §f" + MoneyFormat.format(acc.wallet()));
+            sender.sendMessage("§aBanco: §f" + MoneyFormat.format(acc.bank()));
+        });
+
+        return true;
+    }
+
     // ----------------------------
     // Economy admin: give/take/set
     // ----------------------------
@@ -143,7 +167,8 @@ public final class EcoAdminCommand implements CommandExecutor {
         accounts.getOrLoad(target.getUniqueId(), acc -> {
             accounts.depositWallet(target.getUniqueId(), amount);
 
-            sender.sendMessage("§aAdicionado §f" + MoneyFormat.format(amount) + "§a para §f" + target.getName() + "§a.");
+            sender.sendMessage(
+                    "§aAdicionado §f" + MoneyFormat.format(amount) + "§a para §f" + target.getName() + "§a.");
             target.sendMessage("§aVocê recebeu §f" + MoneyFormat.format(amount) + "§a (admin).");
 
             audit.recordAdminGive(sender.getName(), target.getUniqueId(), amount);
@@ -222,7 +247,8 @@ public final class EcoAdminCommand implements CommandExecutor {
         accounts.getOrLoad(target.getUniqueId(), acc -> {
             accounts.setWallet(target.getUniqueId(), amount);
 
-            sender.sendMessage("§aWallet de §f" + target.getName() + "§a agora é §f" + MoneyFormat.format(amount) + "§a.");
+            sender.sendMessage(
+                    "§aWallet de §f" + target.getName() + "§a agora é §f" + MoneyFormat.format(amount) + "§a.");
             target.sendMessage("§eSeu saldo foi ajustado para §f" + MoneyFormat.format(amount) + "§e (admin).");
 
             audit.recordAdminSet(sender.getName(), target.getUniqueId(), amount);
@@ -239,5 +265,6 @@ public final class EcoAdminCommand implements CommandExecutor {
         sender.sendMessage("§7/eco give <player> <amount>");
         sender.sendMessage("§7/eco take <player> <amount>");
         sender.sendMessage("§7/eco set <player> <amount>");
+        sender.sendMessage("§7/eco balance <player> §f- ver saldo");
     }
 }

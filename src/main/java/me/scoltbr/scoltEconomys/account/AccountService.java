@@ -33,6 +33,7 @@ public final class AccountService {
     private final TransactionAuditService audit;
 
     private final StripedLocks<UUID> accountLocks;
+    private final java.util.concurrent.ConcurrentHashMap<UUID, java.util.List<Consumer<PlayerAccount>>> pendingLoads;
 
     public AccountService(Plugin plugin,
                           AsyncExecutor async,
@@ -50,6 +51,7 @@ public final class AccountService {
         this.audit = audit;
 
         this.accountLocks = new StripedLocks<>(256);
+        this.pendingLoads = new java.util.concurrent.ConcurrentHashMap<>();
     }
 
     public Optional<PlayerAccount> getCached(UUID uuid) {
@@ -61,7 +63,27 @@ public final class AccountService {
      * DB sempre no async.
      */
     public void getOrLoad(UUID uuid, Consumer<PlayerAccount> callback) {
-        cache.get(uuid).ifPresentOrElse(callback, () -> {
+        Optional<PlayerAccount> cached = cache.get(uuid);
+        if (cached.isPresent()) {
+            callback.accept(cached.get());
+            return;
+        }
+
+        pendingLoads.compute(uuid, (key, list) -> {
+            Optional<PlayerAccount> doubleCheck = cache.get(uuid);
+            if (doubleCheck.isPresent()) {
+                Bukkit.getScheduler().runTask(plugin, () -> callback.accept(doubleCheck.get()));
+                return list;
+            }
+
+            if (list != null) {
+                list.add(callback);
+                return list;
+            }
+
+            java.util.List<Consumer<PlayerAccount>> newList = new java.util.ArrayList<>();
+            newList.add(callback);
+
             async.runAsync(() -> {
                 PlayerAccount loaded = repo.load(uuid)
                         .orElseGet(() -> new PlayerAccount(
@@ -73,8 +95,17 @@ public final class AccountService {
 
                 cache.put(loaded);
 
-                Bukkit.getScheduler().runTask(plugin, () -> callback.accept(loaded));
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    java.util.List<Consumer<PlayerAccount>> callbacks = pendingLoads.remove(uuid);
+                    if (callbacks != null) {
+                        for (Consumer<PlayerAccount> cb : callbacks) {
+                            cb.accept(loaded);
+                        }
+                    }
+                });
             });
+
+            return newList;
         });
     }
 
@@ -329,6 +360,34 @@ public final class AccountService {
                 .orElse(java.util.OptionalDouble.empty());
     }
 
+    // ----------------------------
+    // Vault Sync API (Offline players)
+    // ----------------------------
+
+    public double getWalletSync(UUID uuid) {
+        Optional<PlayerAccount> cached = cache.get(uuid);
+        if (cached.isPresent()) {
+            return cached.get().wallet();
+        }
+        return repo.getWalletBalanceSync(uuid).orElse(0.0);
+    }
+
+    public boolean addWalletSync(UUID uuid, double amount) {
+        // Amount could be negative for withdraw
+        Optional<PlayerAccount> cached = cache.get(uuid);
+        if (cached.isPresent()) {
+            return withLockResult(uuid, () -> {
+                PlayerAccount acc = requireCached(uuid);
+                if (acc.wallet() + amount < 0) return false;
+                acc.addWallet(amount);
+                cache.markDirty(uuid);
+                return true;
+            });
+        }
+        
+        // Not in cache, update DB directly
+        return repo.addWalletBalanceSync(uuid, amount);
+    }
 
     // opcional: se você usa em algum lugar
     public UUID uuidOf(Player player) {

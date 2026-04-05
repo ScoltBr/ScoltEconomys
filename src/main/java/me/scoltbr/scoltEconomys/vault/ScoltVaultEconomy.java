@@ -104,8 +104,8 @@ public final class ScoltVaultEconomy extends AbstractEconomy {
 
     @Override
     public double getBalance(OfflinePlayer player) {
-        // Vault quer resposta rápida. Se não estiver no cache, retornamos 0 (ou carregamos async em background em outra estratégia).
-        return accounts.peekWallet(player.getUniqueId()).orElse(0.0);
+        // Usa o método de sincronização para suportar fallback direto de DB sem corromper/crashar
+        return accounts.getWalletSync(player.getUniqueId());
     }
 
     @Override
@@ -148,7 +148,7 @@ public final class ScoltVaultEconomy extends AbstractEconomy {
     @Override
     public EconomyResponse withdrawPlayer(OfflinePlayer player, double amount) {
         if (amount < 0) return responseFail(amount, 0, "Amount must be positive");
-        boolean ok = accounts.withdrawWallet(player.getUniqueId(), amount);
+        boolean ok = accounts.addWalletSync(player.getUniqueId(), -amount);
         return ok
                 ? responseOk(amount, getBalance(player))
                 : responseFail(amount, getBalance(player), "Insufficient funds");
@@ -172,7 +172,7 @@ public final class ScoltVaultEconomy extends AbstractEconomy {
     @Override
     public EconomyResponse depositPlayer(OfflinePlayer player, double amount) {
         if (amount < 0) return responseFail(amount, getBalance(player), "Amount must be positive");
-        accounts.depositWallet(player.getUniqueId(), amount);
+        accounts.addWalletSync(player.getUniqueId(), amount);
         return responseOk(amount, getBalance(player));
     }
 

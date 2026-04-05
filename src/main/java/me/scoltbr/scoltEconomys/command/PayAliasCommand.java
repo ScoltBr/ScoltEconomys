@@ -25,7 +25,7 @@ public class PayAliasCommand implements CommandExecutor {
             return true;
         }
 
-        Bukkit.dispatchCommand(sender, "money pay " + target + " " + amount);
+        Bukkit.dispatchCommand(sender, "money enviar " + target + " " + amount);
         return true;
     }
 }

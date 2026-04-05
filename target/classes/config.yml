@@ -1,14 +1,14 @@
 database:
-  host: sd-br4.blazebr.com
+  host: 127.0.0.1
   port: 3306
-  name: s12346_ScoltTestes
-  user: u12346_OyjrFot1gX
-  password: gEKIEX2SrO+NqhQL!62LGc.t
+  name: scolteconomys
+  user: root
+  password: ""
   use-ssl: false
 
   pool:
-    max-size: 10
-    min-idle: 2
+    max-size: 20
+    min-idle: 5
     max-lifetime-ms: 1800000
     connection-timeout-ms: 5000
 
@@ -23,25 +23,29 @@ defaults:
 tax:
   transfer:
     enabled: true
-    rate: 0.03000000000000001 # 2%
+    rate: 0.03 # 3%
     min-fee: 0.0
     max-fee: 9999999.0
   withdraw:
     enabled: true
-    rate: 0.09999999999999995
+    rate: 0.10 # 10%
     min-fee: 0.0
-    max-fee: 9.99999999E8
+    max-fee: 999999999.0
 
 treasury:
   enabled: true
   wallet-account: TREASURY # só um identificador lógico (não é player)
 
+# Configurações de Auditoria
 audit:
-  enabled: true
-  buffer-size: 5000
   file:
+    # Habilitar gravação em arquivo (recomendado: true)
     enabled: true
-    path: audit-transactions.log
+    path: "audit-transactions.log"
+  console:
+    # Habilitar mensagens de auditoria no console (false para evitar SPAM com 500+ jogadores)
+    enabled: false
+  buffer-size: 5000
 
 bank:
   enabled: true
@@ -52,6 +56,7 @@ bank:
     interval-seconds: 600 # 10 min
     rate: 0.002 # 0.2% por intervalo
     cap-per-interval: 5000.0 # teto de juros por intervalo
+    online-only: true # juros apenas para jogadores que entrarem no servidor no intervalo
 
 stats:
   enabled: true

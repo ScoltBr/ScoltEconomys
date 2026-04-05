@@ -10,12 +10,6 @@ public final class ShutdownHook {
 
     public void run() {
         try {
-            if (bootstrap.accountFlushService() != null) {
-                bootstrap.accountFlushService().flushAllBlocking();
-            }
-        } catch (Exception ignored) {}
-
-        try {
             if (bootstrap.tasks() != null) {
                 bootstrap.tasks().cancelAll();
             }
@@ -24,6 +18,24 @@ public final class ShutdownHook {
         try {
             if (bootstrap.asyncExecutor() != null) {
                 bootstrap.asyncExecutor().shutdown();
+            }
+        } catch (Exception ignored) {}
+
+        try {
+            if (bootstrap.accountFlushService() != null) {
+                bootstrap.accountFlushService().flushAllBlocking();
+            }
+        } catch (Exception ignored) {}
+
+        try {
+            if (bootstrap.auditService() != null) {
+                bootstrap.auditService().stop();
+            }
+        } catch (Exception ignored) {}
+        
+        try {
+            if (bootstrap.treasuryService() != null) {
+                bootstrap.treasuryService().stop();
             }
         } catch (Exception ignored) {}
 

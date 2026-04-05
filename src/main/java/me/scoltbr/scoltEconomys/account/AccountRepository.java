@@ -8,5 +8,7 @@ public interface AccountRepository {
     Optional<PlayerAccount> load(UUID uuid);
     void upsertBatch(List<PlayerAccount> accounts);
     List<TopBalanceRow> topTotal(int limit);
-
+    java.util.OptionalDouble getWalletBalanceSync(UUID uuid);
+    boolean addWalletBalanceSync(UUID uuid, double amount);
+    GlobalEconomyData getGlobalEconomyData();
 }

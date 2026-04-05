@@ -4,6 +4,7 @@ import me.scoltbr.scoltEconomys.account.AccountService;
 import me.scoltbr.scoltEconomys.util.MoneyFormat;
 import me.scoltbr.scoltEconomys.util.MoneyParser;
 import me.scoltbr.scoltEconomys.util.Preconditions;
+import me.scoltbr.scoltEconomys.util.MessageUtils;
 import org.bukkit.Bukkit;
 import org.bukkit.command.*;
 import org.bukkit.entity.Player;
@@ -19,61 +20,69 @@ public final class PayCommand implements CommandExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
         if (!(sender instanceof Player from)) {
-            sender.sendMessage("Apenas jogadores.");
+            MessageUtils.sendError(sender, "Apenas jogadores.");
             return true;
         }
 
         if (args.length < 2) {
-            from.sendMessage("§cUso: /pay <player> <amount>");
+            MessageUtils.sendError(from, "Uso: /pay <player> <amount>");
             return true;
         }
 
         Player to = Bukkit.getPlayerExact(args[0]);
         if (to == null) {
-            from.sendMessage("§cJogador não encontrado (por enquanto só online).");
+            MessageUtils.sendError(from, "Jogador não encontrado (por enquanto só online).");
             return true;
         }
 
         if (to.getUniqueId().equals(from.getUniqueId())) {
-            from.sendMessage("§cVocê não pode pagar a si mesmo.");
+            MessageUtils.sendError(from, "Você não pode pagar a si mesmo.");
             return true;
         }
 
         double amount;
         try {
-            amount = MoneyParser.parse(args[2]);
+            amount = MoneyParser.parse(args[1]); // fix: era args[2]
         } catch (Exception e) {
-            sender.sendMessage("§cValor inválido.");
+            MessageUtils.sendError(from, "Valor inválido.");
             return true;
         }
 
         try {
             Preconditions.positive(amount, "amount");
         } catch (IllegalArgumentException e) {
-            from.sendMessage("§cO valor precisa ser maior que 0.");
+            MessageUtils.sendError(from, "O valor precisa ser maior que 0.");
             return true;
         }
 
-        // Carrega as duas contas (se já estiverem em cache, é imediato).
+        // Garante que as duas contas estão carregadas antes de transferir
         accounts.getOrLoad(from.getUniqueId(), fromAcc -> {
             accounts.getOrLoad(to.getUniqueId(), toAcc -> {
 
-                // ✅ Aqui fica pronto para plugar imposto depois:
-                // double fee = taxManager.calculateTransferFee(amount);
-                // double finalAmount = amount - fee;
-                // Por enquanto: sem taxa.
-                double finalAmount = amount;
+                // Usa transferWallet: respeita impostos, audit e StripedLocks (anti-deadlock)
+                var result = accounts.transferWallet(from.getUniqueId(), to.getUniqueId(), amount);
 
-                boolean ok = accounts.withdrawWallet(from.getUniqueId(), amount);
-                if (!ok) {
-                    from.sendMessage("§cSaldo insuficiente.");
+                if (!result.success()) {
+                    if ("insufficient-funds".equals(result.reason())) {
+                        MessageUtils.sendError(from, "Saldo insuficiente.");
+                    } else {
+                        MessageUtils.sendError(from, "Não foi possível concluir a transferência.");
+                    }
                     return;
                 }
 
-                accounts.depositWallet(to.getUniqueId(), finalAmount);
+                String formattedNet = MoneyFormat.format(result.net());
+                MessageUtils.send(from, "<green>Você enviou <white>$ " + formattedNet + "</white> para <aqua>" + to.getName() + "</aqua>.</green>");
+                MessageUtils.playSuccess(from);
+                MessageUtils.actionBar(from, "<red>-$ " + formattedNet + "</red>");
 
-                from.sendMessage("§aVocê enviou §f" + MoneyFormat.format(finalAmount) + "§a para §f" + to.getName() + "§a.");
-                to.sendMessage("§aVocê recebeu §f" + MoneyFormat.format(finalAmount) + "§a de §f" + from.getName() + "§a.");
+                if (result.fee() > 0) {
+                    MessageUtils.send(from, "<gray>Imposto retido: <white>$ " + MoneyFormat.format(result.fee()) + "</white></gray>");
+                }
+
+                MessageUtils.send(to, "<green>Você recebeu <white>$ " + formattedNet + "</white> de <aqua>" + from.getName() + "</aqua>.</green>");
+                MessageUtils.playSuccess(to);
+                MessageUtils.actionBar(to, "<green>+$ " + formattedNet + "</green>");
             });
         });
 

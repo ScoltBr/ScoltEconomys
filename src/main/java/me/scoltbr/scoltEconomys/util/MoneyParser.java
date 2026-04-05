@@ -26,6 +26,27 @@ public final class MoneyParser {
         } else if (input.endsWith("T")) {
             multiplier = 1_000_000_000_000d;
             input = input.substring(0, input.length() - 1);
+        } else if (input.endsWith("UN")) {
+            multiplier = 1_000_000_000_000_000_000_000_000_000_000_000_000d;
+            input = input.substring(0, input.length() - 2);
+        } else if (input.endsWith("D")) {
+            multiplier = 1_000_000_000_000_000_000_000_000_000_000_000d;
+            input = input.substring(0, input.length() - 1);
+        } else if (input.endsWith("N")) {
+            multiplier = 1_000_000_000_000_000_000_000_000_000_000d;
+            input = input.substring(0, input.length() - 1);
+        } else if (input.endsWith("O")) {
+            multiplier = 1_000_000_000_000_000_000_000_000_000d;
+            input = input.substring(0, input.length() - 1);
+        } else if (input.endsWith("SP")) {
+            multiplier = 1_000_000_000_000_000_000_000_000d;
+            input = input.substring(0, input.length() - 2);
+        } else if (input.endsWith("SX")) {
+            multiplier = 1_000_000_000_000_000_000_000d;
+            input = input.substring(0, input.length() - 2);
+        } else if (input.endsWith("QQ")) {
+            multiplier = 1_000_000_000_000_000_000d;
+            input = input.substring(0, input.length() - 2);
         } else if (input.endsWith("Q")) {
             multiplier = 1_000_000_000_000_000d;
             input = input.substring(0, input.length() - 1);

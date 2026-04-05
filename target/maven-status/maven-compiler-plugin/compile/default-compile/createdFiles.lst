@@ -45,6 +45,7 @@ me\scoltbr\scoltEconomys\account\AccountService$TransferResult.class
 me\scoltbr\scoltEconomys\account\TreasuryService.class
 me\scoltbr\scoltEconomys\command\PayAliasCommand.class
 me\scoltbr\scoltEconomys\util\Preconditions.class
+me\scoltbr\scoltEconomys\core\Lifecycle.class
 me\scoltbr\scoltEconomys\command\PayCommand.class
 me\scoltbr\scoltEconomys\stats\AdminStatsService.class
 me\scoltbr\scoltEconomys\command\MoneyCommand.class

@@ -92,9 +92,12 @@ public final class AdminMenuListener implements Listener {
 
         // Só responde aos cards de imposto
         if (type != Material.LIME_TERRACOTTA && type != Material.RED_TERRACOTTA) return;
-        if (e.getCurrentItem() == null || e.getCurrentItem().getItemMeta() == null) return;
+        if (e.getCurrentItem() == null || !e.getCurrentItem().hasItemMeta()) return;
 
-        String name = e.getCurrentItem().getItemMeta().getDisplayName();
+        var meta = e.getCurrentItem().getItemMeta();
+        if (meta == null || !meta.hasDisplayName()) return;
+
+        String name = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(meta.displayName());
         boolean isTransfer = name.contains("Transfer");
         boolean isWithdraw = name.contains("Saque");
 

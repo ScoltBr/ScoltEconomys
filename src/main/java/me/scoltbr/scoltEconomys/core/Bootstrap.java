@@ -8,7 +8,9 @@ import me.scoltbr.scoltEconomys.admin.EcoAdminCommand;
 import me.scoltbr.scoltEconomys.alerts.AlertService;
 import me.scoltbr.scoltEconomys.audit.TransactionAuditService;
 import me.scoltbr.scoltEconomys.bank.BankInterestService;
+import me.scoltbr.scoltEconomys.command.EcoAdminTabCompleter;
 import me.scoltbr.scoltEconomys.command.MoneyCommand;
+import me.scoltbr.scoltEconomys.command.MoneyCommandTabCompleter;
 import me.scoltbr.scoltEconomys.command.PayAliasCommand;
 import me.scoltbr.scoltEconomys.database.DatabaseManager;
 import me.scoltbr.scoltEconomys.database.Migrations;
@@ -68,7 +70,8 @@ public final class Bootstrap {
 
 
         // 4) Services core
-        this.treasuryService = new TreasuryService(plugin);
+        this.treasuryService = new TreasuryService(plugin, databaseManager.dataSource());
+        this.treasuryService.start();
         this.taxManager = new TaxManager(plugin.getConfig().getConfigurationSection("tax"));
         this.auditService = new TransactionAuditService(plugin, asyncExecutor);
 
@@ -88,16 +91,14 @@ public final class Bootstrap {
         this.bankInterestService = new BankInterestService(plugin, accountCache, accountService);
 
         // 6) Stats + alerts
-        var economyCalculator = new me.scoltbr.scoltEconomys.stats.EconomyCalculator(accountCache);
+        var economyCalculator = new me.scoltbr.scoltEconomys.stats.EconomyCalculator(accountRepository);
         var dailyRepo = new EconomyDailyRepositorySql(databaseManager.dataSource());
-        var moneyTopService = new me.scoltbr.scoltEconomys.stats.MoneyTopService(plugin, asyncExecutor, accountRepository);
-
         this.adminStatsService = new AdminStatsService(economyCalculator, dailyRepo);
         this.alertService = new AlertService(plugin, adminStatsService);
         this.statsTickService = new StatsTickService(plugin, adminStatsService, alertService);
 
         // 6.5) Admin GUI (AGORA sim, stats/alerts já existem)
-        this.adminMenuService = new AdminMenuService(plugin, adminStatsService, alertService, taxManager);
+        this.adminMenuService = new AdminMenuService(plugin, asyncExecutor, adminStatsService, alertService, taxManager);
         // 7) App layer
         registerCommands();
         registerListeners();
@@ -146,6 +147,8 @@ public final class Bootstrap {
     private void registerCommands() {
         register("pay", new PayAliasCommand());
         register("money", new MoneyCommand(accountService, moneyTopService));
+        var moneyCmd = plugin.getCommand("money");
+        if (moneyCmd != null) moneyCmd.setTabCompleter(new MoneyCommandTabCompleter());
 
         // EcoCommand deve tratar /eco admin etc.
         register("eco", new EcoAdminCommand(
@@ -156,7 +159,10 @@ public final class Bootstrap {
                 adminStatsService,
                 alertService,
                 adminMenuService
-        ));    }
+        ));
+        var ecoCmd = plugin.getCommand("eco");
+        if (ecoCmd != null) ecoCmd.setTabCompleter(new EcoAdminTabCompleter());
+    }
 
     private void registerListeners() {
         plugin.getServer().getPluginManager().registerEvents(
@@ -203,4 +209,6 @@ public final class Bootstrap {
     public AsyncExecutor asyncExecutor() { return asyncExecutor; }
     public Tasks tasks() { return tasks; }
     public DatabaseManager databaseManager() { return databaseManager; }
+    public TransactionAuditService auditService() { return auditService; }
+    public TreasuryService treasuryService() { return treasuryService; }
 }

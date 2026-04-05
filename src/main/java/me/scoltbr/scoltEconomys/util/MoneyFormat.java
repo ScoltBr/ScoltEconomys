@@ -12,6 +12,13 @@ public final class MoneyFormat {
 
         double abs = Math.abs(value);
 
+        if (abs >= 1_000_000_000_000_000_000_000_000_000_000_000_000d) return formatCompact(value, 1_000_000_000_000_000_000_000_000_000_000_000_000d, "UN");
+        if (abs >= 1_000_000_000_000_000_000_000_000_000_000_000d)     return formatCompact(value, 1_000_000_000_000_000_000_000_000_000_000_000d, "D");
+        if (abs >= 1_000_000_000_000_000_000_000_000_000_000d)         return formatCompact(value, 1_000_000_000_000_000_000_000_000_000_000d, "N");
+        if (abs >= 1_000_000_000_000_000_000_000_000_000d)             return formatCompact(value, 1_000_000_000_000_000_000_000_000_000d, "O");
+        if (abs >= 1_000_000_000_000_000_000_000_000d)                 return formatCompact(value, 1_000_000_000_000_000_000_000_000d, "SP");
+        if (abs >= 1_000_000_000_000_000_000_000d)                     return formatCompact(value, 1_000_000_000_000_000_000_000d, "SX");
+        if (abs >= 1_000_000_000_000_000_000d)                         return formatCompact(value, 1_000_000_000_000_000_000d, "QQ");
         if (abs >= 1_000_000_000_000_000d)
             return formatCompact(value, 1_000_000_000_000_000d, "Q");
 

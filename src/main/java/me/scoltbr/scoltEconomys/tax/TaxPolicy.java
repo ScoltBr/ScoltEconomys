@@ -2,10 +2,10 @@ package me.scoltbr.scoltEconomys.tax;
 
 public final class TaxPolicy {
 
-    private boolean enabled;
-    private double rate;
-    private double minFee;
-    private double maxFee;
+    private volatile boolean enabled;
+    private volatile double rate;
+    private volatile double minFee;
+    private volatile double maxFee;
 
     public TaxPolicy(boolean enabled, double rate, double minFee, double maxFee) {
         this.enabled = enabled;

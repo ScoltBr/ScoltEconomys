@@ -25,8 +25,12 @@ public final class BankInterestService {
         double rate = plugin.getConfig().getDouble("bank.interest.rate", 0.0);
         double cap = plugin.getConfig().getDouble("bank.interest.cap-per-interval", 0.0);
 
+        boolean onlineOnly = plugin.getConfig().getBoolean("bank.interest.online-only", true);
+
         // Itera apenas contas em cache (online + carregadas)
         for (UUID uuid : cache.cachedUuids()) {
+            if (onlineOnly && org.bukkit.Bukkit.getPlayer(uuid) == null) continue;
+            
             accounts.applyBankInterest(uuid, rate, cap);
         }
     }

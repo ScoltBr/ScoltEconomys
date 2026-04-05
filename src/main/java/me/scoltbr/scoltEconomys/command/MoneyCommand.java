@@ -1,11 +1,10 @@
-// src/main/java/me/scoltbr/scoltEconomys/command/MoneyCommand.java
 package me.scoltbr.scoltEconomys.command;
 
 import me.scoltbr.scoltEconomys.account.AccountService;
 import me.scoltbr.scoltEconomys.stats.MoneyTopService;
 import me.scoltbr.scoltEconomys.util.MoneyFormat;
 import me.scoltbr.scoltEconomys.util.MoneyParser;
-import me.scoltbr.scoltEconomys.util.Preconditions;
+import me.scoltbr.scoltEconomys.util.MessageUtils;
 import org.bukkit.Bukkit;
 import org.bukkit.command.*;
 import org.bukkit.entity.Player;
@@ -17,9 +16,8 @@ public final class MoneyCommand implements CommandExecutor {
     private final AccountService accounts;
     private final MoneyTopService topService;
 
-
     public MoneyCommand(AccountService accountService,
-                        MoneyTopService topService) {
+            MoneyTopService topService) {
         this.accounts = accountService;
         this.topService = topService;
     }
@@ -28,7 +26,7 @@ public final class MoneyCommand implements CommandExecutor {
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
 
         if (!(sender instanceof Player player)) {
-            sender.sendMessage("§cApenas jogadores.");
+            MessageUtils.sendError(sender, "Apenas jogadores.");
             return true;
         }
 
@@ -46,7 +44,7 @@ public final class MoneyCommand implements CommandExecutor {
             case "sacar" -> handleWithdraw(player, args);
             case "top" -> moneyTop(sender);
             default -> {
-                player.sendMessage("§cSubcomando inválido.");
+                MessageUtils.sendError(player, "Subcomando inválido.");
                 sendHelp(player);
                 yield true;
             }
@@ -55,33 +53,28 @@ public final class MoneyCommand implements CommandExecutor {
 
     private boolean moneyTop(CommandSender sender) {
 
-        if (!(sender instanceof Player player)) {
-            sender.sendMessage("§cApenas jogadores podem usar isso.");
+        if (!(sender instanceof Player)) {
+            MessageUtils.sendError(sender, "Apenas jogadores podem usar isso.");
             return true;
         }
 
-
         topService.fetchTop10(lines -> {
-
-            player.sendMessage("§6§lTop 10 - Jogadores Mais Ricos");
-            player.sendMessage(" ");
+            MessageUtils.send(sender, "<gold><b>TOP 10 - JOGADORES MAIS RICOS</b></gold>");
+            sender.sendMessage(" "); // break line sem prefixo
 
             if (lines.isEmpty()) {
-                player.sendMessage("§cNenhum dado encontrado.");
+                MessageUtils.sendError(sender, "Nenhum dado encontrado no momento.");
                 return;
             }
 
             int rank = 1;
 
             for (var line : lines) {
-
-                player.sendMessage(
-                        "§e#" + rank +
-                                " §f" + line.name() +
-                                " §7- §a$" +
-                                me.scoltbr.scoltEconomys.util.MoneyFormat.format(line.total())
-                );
-
+                MessageUtils.send(sender,
+                        "<yellow>#" + rank +
+                                " <white>" + line.name() +
+                                " <gray>| <green>$ <bold>" +
+                                MoneyFormat.format(line.total()) + "</bold>");
                 rank++;
             }
         });
@@ -91,27 +84,27 @@ public final class MoneyCommand implements CommandExecutor {
 
     private void showBalance(Player player) {
         accounts.getOrLoad(player.getUniqueId(), acc -> {
-            player.sendMessage("§6§lScoltEconomy");
-            player.sendMessage("§aCarteira: §f" + MoneyFormat.format(acc.wallet()));
-            player.sendMessage("§aBanco: §f" + MoneyFormat.format(acc.bank()));
+            MessageUtils.send(player,
+                    "<white>Carteira: <green>$ <bold>" + MoneyFormat.format(acc.wallet()) + "</bold></green>");
+            MessageUtils.send(player,
+                    "<white>Banco: <aqua>$ <bold>" + MoneyFormat.format(acc.bank()) + "</bold></aqua>");
         });
     }
 
     private boolean handlePay(Player from, String[] args) {
-        // /money pay <player> <amount>
         if (args.length < 3) {
-            from.sendMessage("§cUso: /money enviar <player> <quantidade>");
+            MessageUtils.sendError(from, "Uso incorreto. Utilize o menu ou /money enviar <jogador> <valor>");
             return true;
         }
 
         Player to = Bukkit.getPlayerExact(args[1]);
         if (to == null) {
-            from.sendMessage("§cJogador não encontrado (por enquanto só online).");
+            MessageUtils.sendError(from, "Jogador não encontrado.");
             return true;
         }
 
         if (to.getUniqueId().equals(from.getUniqueId())) {
-            from.sendMessage("§cVocê não pode pagar a si mesmo.");
+            MessageUtils.sendError(from, "Você não pode enviar dinheiro para si mesmo.");
             return true;
         }
 
@@ -119,7 +112,7 @@ public final class MoneyCommand implements CommandExecutor {
         try {
             amount = MoneyParser.parse(args[2]);
         } catch (Exception e) {
-            from.sendMessage("§cValor inválido.");
+            MessageUtils.sendError(from, "Valor inválido inserido.");
             return true;
         }
 
@@ -130,22 +123,28 @@ public final class MoneyCommand implements CommandExecutor {
 
                 if (!result.success()) {
                     if ("insufficient-funds".equals(result.reason())) {
-                        from.sendMessage("§cSaldo insuficiente.");
+                        MessageUtils.sendError(from, "Saldo insuficiente.");
                     } else {
-                        from.sendMessage("§cNão foi possível concluir a transferência.");
+                        MessageUtils.sendError(from, "A transação falhou internamente.");
                     }
                     return;
                 }
 
-                from.sendMessage("§aVocê enviou §f" + MoneyFormat.format(result.net())
-                        + "§a para §f" + to.getName() + "§a.");
+                String formattedNet = MoneyFormat.format(result.net());
+                MessageUtils.send(from, "<green>Você enviou <white>$ " + formattedNet + "</white> para <aqua>"
+                        + to.getName() + "</aqua>.</green>");
+                MessageUtils.playSuccess(from);
+                MessageUtils.actionBar(from, "<red>-$ " + formattedNet + "</red>");
 
                 if (result.fee() > 0) {
-                    from.sendMessage("§7Imposto: §f" + MoneyFormat.format(result.fee()));
+                    MessageUtils.send(from,
+                            "<gray>Imposto retido: <white>$ " + MoneyFormat.format(result.fee()) + "</white></gray>");
                 }
 
-                to.sendMessage("§aVocê recebeu §f" + MoneyFormat.format(result.net())
-                        + "§a de §f" + from.getName() + "§a.");
+                MessageUtils.send(to, "<green>Você recebeu <white>$ " + formattedNet + "</white> de <aqua>"
+                        + from.getName() + "</aqua>.</green>");
+                MessageUtils.playSuccess(to);
+                MessageUtils.actionBar(to, "<green>+$ " + formattedNet + "</green>");
             });
         });
 
@@ -153,9 +152,8 @@ public final class MoneyCommand implements CommandExecutor {
     }
 
     private boolean handleDeposit(Player player, String[] args) {
-        // /money deposit <amount>
         if (args.length < 2) {
-            player.sendMessage("§cUso: /money depositar <quantidade>");
+            MessageUtils.sendError(player, "Uso: /money depositar <quantidade>");
             return true;
         }
 
@@ -163,7 +161,7 @@ public final class MoneyCommand implements CommandExecutor {
         try {
             amount = MoneyParser.parse(args[1]);
         } catch (Exception e) {
-            player.sendMessage("§cValor inválido.");
+            MessageUtils.sendError(player, "Valor inválido.");
             return true;
         }
 
@@ -172,23 +170,25 @@ public final class MoneyCommand implements CommandExecutor {
 
             if (!res.success()) {
                 switch (res.reason()) {
-                    case "insufficient-wallet" -> player.sendMessage("§cVocê não tem saldo suficiente na wallet.");
-                    case "bank-limit" -> player.sendMessage("§cSeu banco atingiu o limite máximo.");
-                    default -> player.sendMessage("§cNão foi possível depositar.");
+                    case "insufficient-wallet" ->
+                        MessageUtils.sendError(player, "Você não tem dinheiro na carteira suficiente.");
+                    case "bank-limit" -> MessageUtils.sendError(player, "Sua conta atingiu o saldo máximo.");
+                    default -> MessageUtils.sendError(player, "Não foi possível depositar no banco.");
                 }
                 return;
             }
 
-            player.sendMessage("§aVocê depositou §f" + MoneyFormat.format(amount) + "§a no banco.");
+            MessageUtils.send(player,
+                    "<green>Você depositou <white>$ " + MoneyFormat.format(amount) + "</white> no banco.</green>");
+            MessageUtils.playSuccess(player);
         });
 
         return true;
     }
 
     private boolean handleWithdraw(Player player, String[] args) {
-        // /money withdraw <amount>
         if (args.length < 2) {
-            player.sendMessage("§cUso: /money sacar <quantidade>");
+            MessageUtils.sendError(player, "Uso: /money sacar <valor>");
             return true;
         }
 
@@ -196,7 +196,7 @@ public final class MoneyCommand implements CommandExecutor {
         try {
             amount = MoneyParser.parse(args[1]);
         } catch (Exception e) {
-            player.sendMessage("§cValor inválido.");
+            MessageUtils.sendError(player, "Valor inválido inserido.");
             return true;
         }
 
@@ -205,15 +205,19 @@ public final class MoneyCommand implements CommandExecutor {
 
             if (!res.success()) {
                 switch (res.reason()) {
-                    case "insufficient-bank" -> player.sendMessage("§cVocê não tem saldo suficiente no banco.");
-                    default -> player.sendMessage("§cNão foi possível sacar.");
+                    case "insufficient-bank" -> MessageUtils.sendError(player, "Você não possui fundos no banco.");
+                    default -> MessageUtils.sendError(player, "Falha ao sacar. Entre em contato com a equipe.");
                 }
                 return;
             }
 
-            player.sendMessage("§aVocê sacou §f" + MoneyFormat.format(res.net()) + "§a do banco.");
+            MessageUtils.send(player,
+                    "<green>Você sacou <white>$ " + MoneyFormat.format(res.net()) + "</white> do seu banco.</green>");
+            MessageUtils.playSuccess(player);
+
             if (res.fee() > 0) {
-                player.sendMessage("§7Imposto de saque: §f" + MoneyFormat.format(res.fee()));
+                MessageUtils.send(player,
+                        "<gray>Imposto de Renda: <white>$ " + MoneyFormat.format(res.fee()) + "</white></gray>");
             }
         });
 
@@ -221,12 +225,16 @@ public final class MoneyCommand implements CommandExecutor {
     }
 
     private void sendHelp(Player player) {
-        player.sendMessage("§7Use:");
-        player.sendMessage("§f/money §7(ver saldo)");
-        player.sendMessage("§f/money enviar <player> <quantidade>");
-        player.sendMessage("§f/money depositar <quantidade>");
-        player.sendMessage("§f/money sacar <quantidade>");
-        player.sendMessage("§f/money top");
-
+        MessageUtils.send(player, "<gray>Comandos Básicos de Economia:</gray>");
+        player.sendMessage(MessageUtils.parseRaw(
+                " <gray>•</gray> <hover:show_text:'<gray>Ver meu próprio saldo'><click:run_command:'/money'><aqua>/money</aqua></click></hover>"));
+        player.sendMessage(MessageUtils.parseRaw(
+                " <gray>•</gray> <hover:show_text:'<gray>Clique para enviar a um amigo'><click:suggest_command:'/money enviar '><aqua>/money enviar</aqua> <white><jog><val></white></click></hover>"));
+        player.sendMessage(MessageUtils.parseRaw(
+                " <gray>•</gray> <hover:show_text:'<gray>Clique para guardar no banco'><click:suggest_command:'/money depositar '><aqua>/money depositar</aqua> <white><val></white></click></hover>"));
+        player.sendMessage(MessageUtils.parseRaw(
+                " <gray>•</gray> <hover:show_text:'<gray>Clique para retirar do banco'><click:suggest_command:'/money sacar '><aqua>/money sacar</aqua> <white><val></white></click></hover>"));
+        player.sendMessage(MessageUtils.parseRaw(
+                " <gray>•</gray> <hover:show_text:'<gray>Ver o ranking bilionário'><click:run_command:'/baltop'><aqua>/baltop</aqua></click></hover>"));
     }
 }

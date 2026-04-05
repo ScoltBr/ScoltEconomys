@@ -18,19 +18,24 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
-public class AdminMenuService {
+public final class AdminMenuService {
 
     private final AdminStatsService stats;
     private final AlertService alerts;
     private final Plugin plugin;
     private final TaxManager taxManager;
+    private final me.scoltbr.scoltEconomys.scheduler.AsyncExecutor async;
 
-    public AdminMenuService(Plugin plugin, AdminStatsService stats, AlertService alerts, TaxManager taxManager) {
+    public AdminMenuService(Plugin plugin, 
+                            me.scoltbr.scoltEconomys.scheduler.AsyncExecutor async,
+                            AdminStatsService stats, 
+                            AlertService alerts, 
+                            TaxManager taxManager) {
         this.plugin = plugin;
+        this.async = async;
         this.stats = stats;
         this.alerts = alerts;
         this.taxManager = taxManager;
-
     }
 
     public void openMain(Player player) {
@@ -101,7 +106,7 @@ public class AdminMenuService {
         // Buttons
         inv.setItem(49, MenuItems.item(Material.ENDER_EYE, "§b§lAtualizar", "§7Clique para atualizar esta página"));
 
-        inv.setItem(46, MenuItems.item(Material.PAPER, "§f§lImpostos", "§7(Em breve)"));
+        inv.setItem(46, MenuItems.item(Material.PAPER, "§f§lImpostos", "§7Clique para gerenciar as taxas"));
         inv.setItem(47, MenuItems.item(Material.GOLD_INGOT, "§6§lBanco", "§7(Em breve)"));
         inv.setItem(48, MenuItems.item(Material.BELL, "§c§lAlertas", "§7Clique para ver detalhes"));
 
@@ -191,7 +196,7 @@ public class AdminMenuService {
                 : "tax.withdraw.rate";
 
         plugin.getConfig().set(key, newRate);
-        plugin.saveConfig();
+        async.runAsync(plugin::saveConfig);
 
         p.sendMessage("§aTaxa atualizada: §f" + pct(newRate));
     }
@@ -206,7 +211,7 @@ public class AdminMenuService {
                 : "tax.withdraw.enabled";
 
         plugin.getConfig().set(key, newEnabled);
-        plugin.saveConfig();
+        async.runAsync(plugin::saveConfig);
 
         p.sendMessage("§eTaxa " + (newEnabled ? "§aATIVADA" : "§cDESATIVADA") + "§e.");
     }
