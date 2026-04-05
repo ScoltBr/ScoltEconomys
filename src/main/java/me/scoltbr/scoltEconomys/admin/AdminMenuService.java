@@ -26,11 +26,11 @@ public final class AdminMenuService {
     private final TaxManager taxManager;
     private final me.scoltbr.scoltEconomys.scheduler.AsyncExecutor async;
 
-    public AdminMenuService(Plugin plugin, 
-                            me.scoltbr.scoltEconomys.scheduler.AsyncExecutor async,
-                            AdminStatsService stats, 
-                            AlertService alerts, 
-                            TaxManager taxManager) {
+    public AdminMenuService(Plugin plugin,
+            me.scoltbr.scoltEconomys.scheduler.AsyncExecutor async,
+            AdminStatsService stats,
+            AlertService alerts,
+            TaxManager taxManager) {
         this.plugin = plugin;
         this.async = async;
         this.stats = stats;
@@ -39,30 +39,37 @@ public final class AdminMenuService {
     }
 
     public void openMain(Player player) {
-        Inventory inv = Bukkit.createInventory(new AdminMenuHolder(AdminMenuPage.MAIN), 54, "§6§lScoltEconomy §7(Admin)");
+        Inventory inv = Bukkit.createInventory(new AdminMenuHolder(AdminMenuPage.MAIN), 54,
+                "§6§lScoltEconomy §7(Admin)");
         renderMain(inv);
         player.openInventory(inv);
     }
 
     public void openAlerts(Player player) {
-        Inventory inv = Bukkit.createInventory(new AdminMenuHolder(AdminMenuPage.ALERTS), 54, "§6§lScoltEconomy §7(Alertas)");
+        Inventory inv = Bukkit.createInventory(new AdminMenuHolder(AdminMenuPage.ALERTS), 54,
+                "§6§lScoltEconomy §7(Alertas)");
         renderAlerts(inv);
         player.openInventory(inv);
     }
 
     public void openTax(Player player) {
-        Inventory inv = Bukkit.createInventory(new AdminMenuHolder(AdminMenuPage.TAX), 54, "§6§lScoltEconomy §7(Impostos)");
+        Inventory inv = Bukkit.createInventory(new AdminMenuHolder(AdminMenuPage.TAX), 54,
+                "§6§lScoltEconomy §7(Impostos)");
         renderTax(inv);
         player.openInventory(inv);
     }
 
     public void refresh(Inventory inv) {
-        if (!(inv.getHolder() instanceof AdminMenuHolder holder)) return;
+        if (!(inv.getHolder() instanceof AdminMenuHolder holder))
+            return;
 
         inv.clear();
-        if (holder.page() == AdminMenuPage.MAIN) renderMain(inv);
-        if (holder.page() == AdminMenuPage.ALERTS) renderAlerts(inv);
-        if (holder.page() == AdminMenuPage.TAX) renderTax(inv);
+        if (holder.page() == AdminMenuPage.MAIN)
+            renderMain(inv);
+        if (holder.page() == AdminMenuPage.ALERTS)
+            renderAlerts(inv);
+        if (holder.page() == AdminMenuPage.TAX)
+            renderTax(inv);
     }
 
     private void renderMain(Inventory inv) {
@@ -80,8 +87,7 @@ public final class AdminMenuService {
                 "§7Banco: §f" + MoneyFormat.format(snap.totalBank()),
                 "§7Ativos: §f" + snap.activePlayers(),
                 "§7Média/ativo: §f" + MoneyFormat.format(snap.averagePerActivePlayer()),
-                "§7Top 10%: §f" + pct(snap.top10Concentration())
-        ));
+                "§7Top 10%: §f" + pct(snap.top10Concentration())));
 
         // Growth 24h
         String growthLine = growthOpt
@@ -90,8 +96,7 @@ public final class AdminMenuService {
 
         inv.setItem(22, MenuItems.item(Material.CLOCK, "§e§lCrescimento",
                 growthLine,
-                "§8Base: hoje vs ontem (tabela diária)"
-        ));
+                "§8Base: hoje vs ontem (tabela diária)"));
 
         // Alerts summary
         inv.setItem(31, MenuItems.item(
@@ -100,8 +105,7 @@ public final class AdminMenuService {
                 activeAlerts.isEmpty()
                         ? "§aNenhum alerta ativo"
                         : ("§c" + activeAlerts.size() + " alerta(s) ativo(s)"),
-                "§7Clique para abrir"
-        ));
+                "§7Clique para abrir"));
 
         // Buttons
         inv.setItem(49, MenuItems.item(Material.ENDER_EYE, "§b§lAtualizar", "§7Clique para atualizar esta página"));
@@ -130,12 +134,13 @@ public final class AdminMenuService {
 
         int slot = 10;
         for (Alert a : active) {
-            if (slot >= 44) break; // área interna
+            if (slot >= 44)
+                break; // área interna
             inv.setItem(slot++, MenuItems.item(Material.RED_DYE, "§c§l" + a.type().name(),
                     "§7" + a.message(),
-                    "§8Desde: §7" + a.since().toString()
-            ));
-            if (slot % 9 == 8) slot += 2; // pula bordas
+                    "§8Desde: §7" + a.since().toString()));
+            if (slot % 9 == 8)
+                slot += 2; // pula bordas
         }
     }
 
@@ -152,8 +157,7 @@ public final class AdminMenuService {
                 "§e§lTaxa de Transferência",
                 "tax.transfer",
                 t.enabled(),
-                t.rate()
-        ));
+                t.rate()));
 
         // WITHDRAW
         var w = taxManager.policy(TaxType.WITHDRAW);
@@ -161,8 +165,7 @@ public final class AdminMenuService {
                 "§6§lTaxa de Saque",
                 "tax.withdraw",
                 w.enabled(),
-                w.rate()
-        ));
+                w.rate()));
 
         // Controles (legenda)
         inv.setItem(31, MenuItems.item(Material.BOOK, "§f§lControles",
@@ -170,8 +173,7 @@ public final class AdminMenuService {
                 "§7Clique direito: §c-0.1%",
                 "§7Shift+Esq: §a+1.0%",
                 "§7Shift+Dir: §c-1.0%",
-                "§7Tecla Q: §eAtivar/Desativar"
-        ));
+                "§7Tecla Q: §eAtivar/Desativar"));
     }
 
     private ItemStack taxCard(String title, String keyPrefix, boolean enabled, double rate) {
@@ -182,8 +184,7 @@ public final class AdminMenuService {
                 "§7Taxa: §f" + pct(rate),
                 "§8",
                 "§7Ajuste com cliques",
-                "§8Key: " + keyPrefix
-        );
+                "§8Key: " + keyPrefix);
     }
 
     public void adjustTaxRate(Player p, TaxType type, double delta) {
@@ -225,9 +226,12 @@ public final class AdminMenuService {
     }
 
     private String colorGrowth(double g) {
-        if (g >= 0.25) return "§c";
-        if (g >= 0.10) return "§e";
-        if (g >= 0.00) return "§a";
+        if (g >= 0.25)
+            return "§c";
+        if (g >= 0.10)
+            return "§e";
+        if (g >= 0.00)
+            return "§a";
         return "§b";
     }
 }
