@@ -4,7 +4,6 @@ import me.scoltbr.scoltEconomys.account.AccountRepository;
 import me.scoltbr.scoltEconomys.account.TopBalanceRow;
 import me.scoltbr.scoltEconomys.scheduler.AsyncExecutor;
 import org.bukkit.Bukkit;
-import org.bukkit.OfflinePlayer;
 import org.bukkit.plugin.Plugin;
 
 import java.util.List;
@@ -26,10 +25,9 @@ public final class MoneyTopService {
         async.runAsync(() -> {
             List<TopBalanceRow> rows = repo.topTotal(10);
 
-            // resolve nomes (pode ser null se nunca entrou)
+            // Usa o nome salvo no banco; fallback curto somente para contas pré-migration
             List<TopLine> lines = rows.stream().map(r -> {
-                OfflinePlayer op = Bukkit.getOfflinePlayer(r.uuid());
-                String name = op.getName();
+                String name = r.name();
                 if (name == null || name.isBlank()) {
                     name = r.uuid().toString().substring(0, 8);
                 }
@@ -42,4 +40,4 @@ public final class MoneyTopService {
     }
 
     public record TopLine(String name, double total) {}
-}
+}

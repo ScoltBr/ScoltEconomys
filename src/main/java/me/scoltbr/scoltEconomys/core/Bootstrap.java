@@ -146,7 +146,7 @@ public final class Bootstrap {
 
     private void registerCommands() {
         register("pay", new PayAliasCommand());
-        register("money", new MoneyCommand(accountService, moneyTopService));
+        register("money", new MoneyCommand(accountService, moneyTopService, adminMenuService));
         var moneyCmd = plugin.getCommand("money");
         if (moneyCmd != null) moneyCmd.setTabCompleter(new MoneyCommandTabCompleter());
 
@@ -166,7 +166,7 @@ public final class Bootstrap {
 
     private void registerListeners() {
         plugin.getServer().getPluginManager().registerEvents(
-                new PlayerLifecycleListener(accountService, accountFlushService),
+                new PlayerLifecycleListener(accountService, accountFlushService, accountRepository, asyncExecutor),
                 plugin
         );
 

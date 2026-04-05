@@ -1,5 +1,6 @@
 package me.scoltbr.scoltEconomys.account;
 
+import me.scoltbr.scoltEconomys.scheduler.AsyncExecutor;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
@@ -9,10 +10,17 @@ public final class PlayerLifecycleListener implements Listener {
 
     private final AccountService accountService;
     private final AccountFlushService flushService;
+    private final AccountRepository accountRepository;
+    private final AsyncExecutor async;
 
-    public PlayerLifecycleListener(AccountService accountService, AccountFlushService flushService) {
+    public PlayerLifecycleListener(AccountService accountService,
+                                   AccountFlushService flushService,
+                                   AccountRepository accountRepository,
+                                   AsyncExecutor async) {
         this.accountService = accountService;
         this.flushService = flushService;
+        this.accountRepository = accountRepository;
+        this.async = async;
     }
 
     @EventHandler
@@ -29,6 +37,12 @@ public final class PlayerLifecycleListener implements Listener {
             e.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, "§cErro interno. Tente novamente.");
             Thread.currentThread().interrupt();
         }
+
+        // Salva o nome do jogador para o ranking funcionar corretamente
+        String name = e.getName();
+        if (name != null && !name.isBlank()) {
+            async.runAsync(() -> accountRepository.updatePlayerName(e.getUniqueId(), name));
+        }
     }
 
     @EventHandler
@@ -36,4 +50,4 @@ public final class PlayerLifecycleListener implements Listener {
         flushService.flushNowAndRemove(e.getPlayer().getUniqueId());
         // opcional: remover do cache depois de um tempo/instantâneo
     }
-}
+}

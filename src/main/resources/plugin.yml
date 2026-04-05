@@ -1,5 +1,5 @@
 name: ScoltEconomys
-version: '1.0.1'
+version: '1.1.2'
 main: me.scoltbr.scoltEconomys.Main
 api-version: '1.21'
 authors: [ ScoltBr ]

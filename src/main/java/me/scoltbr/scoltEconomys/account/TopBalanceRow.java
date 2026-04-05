@@ -2,4 +2,5 @@ package me.scoltbr.scoltEconomys.account;
 
 import java.util.UUID;
 
-public record TopBalanceRow(UUID uuid, double total) {}
+/** Linha do ranking. {@code name} pode ser null se o jogador nunca salvou o nome. */
+public record TopBalanceRow(UUID uuid, String name, double total) {}

@@ -1,10 +1,14 @@
 package me.scoltbr.scoltEconomys.util;
 
 import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
+import java.util.Locale;
 
 public final class MoneyFormat {
 
-    private static final DecimalFormat FORMAT = new DecimalFormat("#,##0.##");
+    // Sempre Locale.US para nunca misturar separador de milhar "." com o suffix (ex: "1.000M")
+    private static final DecimalFormatSymbols SYMBOLS = new DecimalFormatSymbols(Locale.US);
+    private static final DecimalFormat FORMAT = new DecimalFormat("#,##0.##", SYMBOLS);
 
     private MoneyFormat() {}
 
@@ -39,6 +43,6 @@ public final class MoneyFormat {
 
     private static String formatCompact(double value, double divisor, String suffix) {
         double scaled = value / divisor;
-        return new DecimalFormat("#,##0.##").format(scaled) + suffix;
+        return new DecimalFormat("#,##0.##", SYMBOLS).format(scaled) + suffix;
     }
 }

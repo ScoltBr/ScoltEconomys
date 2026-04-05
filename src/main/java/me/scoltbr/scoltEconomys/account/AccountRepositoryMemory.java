@@ -32,12 +32,16 @@ public final class AccountRepositoryMemory implements AccountRepository {
 
     @Override
     public List<TopBalanceRow> topTotal(int limit) {
-
-        return store.values().stream() // ou seu Map interno
-                .map(acc -> new TopBalanceRow(acc.uuid(), acc.wallet() + acc.bank()))
+        return store.values().stream()
+                .map(acc -> new TopBalanceRow(acc.uuid(), null, acc.wallet() + acc.bank()))
                 .sorted((a, b) -> Double.compare(b.total(), a.total()))
                 .limit(limit)
                 .toList();
+    }
+
+    @Override
+    public void updatePlayerName(UUID uuid, String name) {
+        // sem persistência em memória — no-op
     }
 
     @Override

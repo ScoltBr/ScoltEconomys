@@ -17,11 +17,19 @@ public final class Migrations {
             st.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS se_accounts (
                     uuid           CHAR(36) PRIMARY KEY,
+                    player_name    VARCHAR(16) DEFAULT NULL,
                     wallet_balance DOUBLE NOT NULL,
                     bank_balance   DOUBLE NOT NULL,
                     last_update    BIGINT NOT NULL
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             """);
+
+            // Adiciona a coluna player_name caso a tabela já exista sem ela (upgrade seguro)
+            try {
+                st.executeUpdate("ALTER TABLE se_accounts ADD COLUMN player_name VARCHAR(16) DEFAULT NULL");
+            } catch (Exception ignored) {
+                // Coluna já existe — sem problema
+            }
 
             st.executeUpdate("""
                  CREATE TABLE IF NOT EXISTS se_economy_daily (

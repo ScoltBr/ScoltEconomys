@@ -72,7 +72,7 @@ public class AccountRepositorySql implements AccountRepository {
     @Override
     public List<TopBalanceRow> topTotal(int limit) {
         String sql = """
-        SELECT uuid, (wallet_balance + bank_balance) AS total
+        SELECT uuid, player_name, (wallet_balance + bank_balance) AS total
         FROM se_accounts
         ORDER BY total DESC
         LIMIT ?
@@ -87,14 +87,28 @@ public class AccountRepositorySql implements AccountRepository {
                 var list = new java.util.ArrayList<TopBalanceRow>(limit);
                 while (rs.next()) {
                     java.util.UUID uuid = java.util.UUID.fromString(rs.getString("uuid"));
+                    String name = rs.getString("player_name"); // pode ser null em contas antigas
                     double total = rs.getDouble("total");
-                    list.add(new TopBalanceRow(uuid, total));
+                    list.add(new TopBalanceRow(uuid, name, total));
                 }
                 return list;
             }
 
         } catch (java.sql.SQLException e) {
             throw new RuntimeException("Failed topTotal", e);
+        }
+    }
+
+    @Override
+    public void updatePlayerName(UUID uuid, String name) {
+        String sql = "UPDATE se_accounts SET player_name = ? WHERE uuid = ?";
+        try (var c = ds.getConnection();
+             var ps = c.prepareStatement(sql)) {
+            ps.setString(1, name);
+            ps.setString(2, uuid.toString());
+            ps.executeUpdate();
+        } catch (java.sql.SQLException e) {
+            throw new RuntimeException("Failed to update player name for " + uuid, e);
         }
     }
 

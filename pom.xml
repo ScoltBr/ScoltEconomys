@@ -6,7 +6,7 @@
 
     <groupId>me.scoltbr</groupId>
     <artifactId>ScoltEconomys</artifactId>
-    <version>1.0.1</version>
+    <version>1.1.2</version>
     <packaging>jar</packaging>
 
     <name>ScoltEconomys</name>
@@ -41,32 +41,34 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- HikariCP (pool) -->
+        <!-- HikariCP (pool) — shadeado -->
         <dependency>
             <groupId>com.zaxxer</groupId>
             <artifactId>HikariCP</artifactId>
             <version>5.1.0</version>
         </dependency>
 
-        <!-- MySQL Connector/J -->
+        <!-- MySQL Connector/J — shadeado -->
         <dependency>
             <groupId>com.mysql</groupId>
             <artifactId>mysql-connector-j</artifactId>
             <version>9.3.0</version>
         </dependency>
+
+        <!-- Vault API -->
         <dependency>
             <groupId>com.github.MilkBowl</groupId>
             <artifactId>VaultAPI</artifactId>
             <version>1.7</version>
             <scope>provided</scope>
         </dependency>
-        <!-- Caffeine Cache -->
+
+        <!-- Caffeine Cache — shadeado -->
         <dependency>
             <groupId>com.github.ben-manes.caffeine</groupId>
             <artifactId>caffeine</artifactId>
             <version>3.1.8</version>
         </dependency>
-
     </dependencies>
 
     <build>
@@ -102,7 +104,7 @@
                             <goal>shade</goal>
                         </goals>
                         <configuration>
-                            <!-- importantíssimo: não gerar dependency-reduced-pom -->
+                            <!-- não gerar dependency-reduced-pom -->
                             <createDependencyReducedPom>false</createDependencyReducedPom>
 
                             <!-- remove assinaturas que quebram ao sombrear -->
@@ -113,11 +115,29 @@
                                         <exclude>META-INF/*.SF</exclude>
                                         <exclude>META-INF/*.DSA</exclude>
                                         <exclude>META-INF/*.RSA</exclude>
+                                        <exclude>META-INF/MANIFEST.MF</exclude>
                                     </excludes>
                                 </filter>
                             </filters>
 
-                            <!-- Opcional: deixa o nome do jar final limpo -->
+                            <!-- Relocations: reescreve os pacotes dentro do namespace do plugin
+                                 para evitar conflito com outros plugins no mesmo classloader -->
+                            <relocations>
+                                <relocation>
+                                    <pattern>com.zaxxer.hikari</pattern>
+                                    <shadedPattern>me.scoltbr.scoltEconomys.libs.hikari</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.mysql</pattern>
+                                    <shadedPattern>me.scoltbr.scoltEconomys.libs.mysql</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.github.benmanes.caffeine</pattern>
+                                    <shadedPattern>me.scoltbr.scoltEconomys.libs.caffeine</shadedPattern>
+                                </relocation>
+                            </relocations>
+
+                            <!-- Nome limpo do JAR final -->
                             <finalName>${project.artifactId}-${project.version}</finalName>
                         </configuration>
                     </execution>

@@ -1,6 +1,7 @@
 package me.scoltbr.scoltEconomys.command;
 
 import me.scoltbr.scoltEconomys.account.AccountService;
+import me.scoltbr.scoltEconomys.admin.AdminMenuService;
 import me.scoltbr.scoltEconomys.stats.MoneyTopService;
 import me.scoltbr.scoltEconomys.util.MoneyFormat;
 import me.scoltbr.scoltEconomys.util.MoneyParser;
@@ -15,11 +16,14 @@ public final class MoneyCommand implements CommandExecutor {
 
     private final AccountService accounts;
     private final MoneyTopService topService;
+    private final AdminMenuService adminMenuService;
 
     public MoneyCommand(AccountService accountService,
-            MoneyTopService topService) {
+            MoneyTopService topService,
+            AdminMenuService adminMenuService) {
         this.accounts = accountService;
         this.topService = topService;
+        this.adminMenuService = adminMenuService;
     }
 
     @Override
@@ -39,16 +43,29 @@ public final class MoneyCommand implements CommandExecutor {
         String sub = args[0].toLowerCase(Locale.ROOT);
 
         return switch (sub) {
-            case "enviar" -> handlePay(player, args);
+            case "enviar"    -> handlePay(player, args);
             case "depositar" -> handleDeposit(player, args);
-            case "sacar" -> handleWithdraw(player, args);
-            case "top" -> moneyTop(sender);
+            case "sacar"     -> handleWithdraw(player, args);
+            case "top"       -> moneyTop(sender);
+            case "admin"     -> handleAdmin(player);
             default -> {
                 MessageUtils.sendError(player, "Subcomando inválido.");
                 sendHelp(player);
                 yield true;
             }
         };
+    }
+
+    // ----------------------------
+    // Admin GUI via /money admin
+    // ----------------------------
+    private boolean handleAdmin(Player player) {
+        if (!player.hasPermission("scolteconomy.admin")) {
+            MessageUtils.sendError(player, "Você não tem permissão para isso.");
+            return true;
+        }
+        adminMenuService.openMain(player);
+        return true;
     }
 
     private boolean moneyTop(CommandSender sender) {
@@ -68,7 +85,6 @@ public final class MoneyCommand implements CommandExecutor {
             }
 
             int rank = 1;
-
             for (var line : lines) {
                 MessageUtils.send(sender,
                         "<yellow>#" + rank +
