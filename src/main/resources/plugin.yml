@@ -1,5 +1,5 @@
 name: ScoltEconomys
-version: '1.1.2'
+version: '1.2.0'
 main: me.scoltbr.scoltEconomys.Main
 api-version: '1.21'
 authors: [ ScoltBr ]
@@ -15,6 +15,12 @@ commands:
   pay:
     description: Atalho para /money pay
     usage: /pay <player> <amount>
+  bolsa:
+    description: Mercado de Ações Virtual
+    usage: /bolsa [subcomando]
 permissions:
   scolteconomy.admin:
     default: op
+  scolteconomy.stock:
+    description: Permite usar o Mercado de Ações
+    default: true

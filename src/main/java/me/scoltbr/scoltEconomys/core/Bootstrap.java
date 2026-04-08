@@ -20,6 +20,15 @@ import me.scoltbr.scoltEconomys.stats.AdminStatsService;
 import me.scoltbr.scoltEconomys.stats.EconomyDailyRepositorySql;
 import me.scoltbr.scoltEconomys.stats.MoneyTopService;
 import me.scoltbr.scoltEconomys.stats.StatsTickService;
+import me.scoltbr.scoltEconomys.api.ScoltEconomyAPI;
+import me.scoltbr.scoltEconomys.api.ScoltEconomyAPIImpl;
+import me.scoltbr.scoltEconomys.stock.StockMarketCommand;
+import me.scoltbr.scoltEconomys.stock.StockMarketService;
+import me.scoltbr.scoltEconomys.stock.StockMarketTabCompleter;
+import me.scoltbr.scoltEconomys.stock.StockPriceTicker;
+import me.scoltbr.scoltEconomys.stock.StockRepositorySql;
+import me.scoltbr.scoltEconomys.stock.gui.StockMenuListener;
+import me.scoltbr.scoltEconomys.stock.gui.StockMenuService;
 import me.scoltbr.scoltEconomys.tax.TaxManager;
 import org.bukkit.command.CommandExecutor;
 
@@ -42,6 +51,7 @@ public final class Bootstrap {
     private TransactionAuditService auditService;
 
     private BankInterestService bankInterestService;
+    private me.scoltbr.scoltEconomys.event.EventManager eventManager;
 
     // stats + alerts
     private AdminStatsService adminStatsService;
@@ -49,6 +59,15 @@ public final class Bootstrap {
     private StatsTickService statsTickService;
     private AdminMenuService adminMenuService;
     private MoneyTopService moneyTopService;
+
+    // stock market
+    private StockRepositorySql stockRepository;
+    private StockMarketService stockMarketService;
+    private StockPriceTicker   stockPriceTicker;
+    private StockMenuService   stockMenuService;
+
+    // API pública
+    private ScoltEconomyAPIImpl publicApi;
 
     public Bootstrap(Main plugin) {
         this.plugin = plugin;
@@ -72,7 +91,9 @@ public final class Bootstrap {
         // 4) Services core
         this.treasuryService = new TreasuryService(plugin, databaseManager.dataSource());
         this.treasuryService.start();
+        this.eventManager = new me.scoltbr.scoltEconomys.event.EventManager(plugin);
         this.taxManager = new TaxManager(plugin.getConfig().getConfigurationSection("tax"));
+        this.taxManager.setEventManager(eventManager);
         this.auditService = new TransactionAuditService(plugin, asyncExecutor);
 
         this.accountService = new AccountService(
@@ -88,7 +109,7 @@ public final class Bootstrap {
         this.accountFlushService = new AccountFlushService(plugin, asyncExecutor, accountCache, accountRepository);
 
         // 5) Bank interest
-        this.bankInterestService = new BankInterestService(plugin, accountCache, accountService);
+        this.bankInterestService = new BankInterestService(plugin, accountCache, accountService, eventManager);
 
         // 6) Stats + alerts
         var economyCalculator = new me.scoltbr.scoltEconomys.stats.EconomyCalculator(accountRepository);
@@ -99,7 +120,34 @@ public final class Bootstrap {
 
         // 6.5) Admin GUI (AGORA sim, stats/alerts já existem)
         this.adminMenuService = new AdminMenuService(plugin, asyncExecutor, adminStatsService, alertService, taxManager);
-        // 7) App layer
+
+        // 7) Stock Market
+        if (plugin.getConfig().getBoolean("stock-market.enabled", false)) {
+            this.stockRepository     = new StockRepositorySql(databaseManager.dataSource());
+            this.stockMarketService  = new StockMarketService(plugin, asyncExecutor, stockRepository, accountService, treasuryService, eventManager);
+            this.stockMarketService.loadInitialState();
+            this.stockPriceTicker    = new StockPriceTicker(stockMarketService);
+            this.stockMenuService    = new StockMenuService(plugin, stockMarketService);
+        }
+
+        // 8) API Pública — registra no ServicesManager para outros plugins
+        this.publicApi = new ScoltEconomyAPIImpl(
+                plugin,
+                asyncExecutor,
+                accountService,
+                treasuryService,
+                eventManager,
+                stockMarketService  // null-safe: pode ser null se stock-market.enabled=false
+        );
+        plugin.getServer().getServicesManager().register(
+                ScoltEconomyAPI.class,
+                publicApi,
+                plugin,
+                org.bukkit.plugin.ServicePriority.Normal
+        );
+        plugin.getLogger().info("[API] ScoltEconomyAPI v" + publicApi.apiVersion() + " registrada.");
+
+        // 9) App layer
         registerCommands();
         registerListeners();
         scheduleTasks();
@@ -112,10 +160,12 @@ public final class Bootstrap {
 
         int interestInterval = plugin.getConfig().getInt("bank.interest.interval-seconds", 600);
         int statsInterval = plugin.getConfig().getInt("stats.interval-seconds", 600);
+        int autoEventInterval = plugin.getConfig().getInt("events.auto.interval-seconds", 14400);
 
         long flushTicks = 20L * flushIntervalSeconds;
         long interestTicks = 20L * interestInterval;
         long statsTicks = 20L * statsInterval;
+        long autoEventTicks = 20L * autoEventInterval;
 
         // juros
         if (plugin.getConfig().getBoolean("bank.interest.enabled", false)) {
@@ -135,6 +185,34 @@ public final class Bootstrap {
             );
         }
 
+        // eventos automáticos
+        if (plugin.getConfig().getBoolean("events.enabled", true) && 
+            plugin.getConfig().getBoolean("events.auto.enabled", true)) {
+            tasks.runRepeatingAsync(
+                    () -> eventManager.checkAutoEvent(),
+                    autoEventTicks,
+                    autoEventTicks
+            );
+        }
+
+        // feedback visual (ActionBar)
+        tasks.runRepeatingSync(
+                () -> eventManager.tickActionBar(),
+                20L,
+                20L
+        );
+
+        // stock market ticker
+        if (stockPriceTicker != null) {
+            int stockTickInterval = plugin.getConfig().getInt("stock-market.tick-interval-seconds", 300);
+            long stockTicks = 20L * stockTickInterval;
+            tasks.runRepeatingAsync(
+                    stockPriceTicker::tick,
+                    stockTicks,
+                    stockTicks
+            );
+        }
+
         // flush
         tasks.runRepeatingAsync(
                 accountFlushService::flushDirtyBatch,
@@ -146,7 +224,7 @@ public final class Bootstrap {
 
     private void registerCommands() {
         register("pay", new PayAliasCommand());
-        register("money", new MoneyCommand(accountService, moneyTopService, adminMenuService));
+        register("money", new MoneyCommand(accountService, moneyTopService, adminMenuService, eventManager));
         var moneyCmd = plugin.getCommand("money");
         if (moneyCmd != null) moneyCmd.setTabCompleter(new MoneyCommandTabCompleter());
 
@@ -162,6 +240,13 @@ public final class Bootstrap {
         ));
         var ecoCmd = plugin.getCommand("eco");
         if (ecoCmd != null) ecoCmd.setTabCompleter(new EcoAdminTabCompleter());
+
+        // Stock market command — só registra se o módulo estiver ativo
+        if (stockMarketService != null) {
+            register("bolsa", new StockMarketCommand(stockMarketService, stockMenuService));
+            var bolsaCmd = plugin.getCommand("bolsa");
+            if (bolsaCmd != null) bolsaCmd.setTabCompleter(new StockMarketTabCompleter(stockMarketService));
+        }
     }
 
     private void registerListeners() {
@@ -175,6 +260,12 @@ public final class Bootstrap {
                 plugin
         );
 
+        if (stockMarketService != null) {
+            plugin.getServer().getPluginManager().registerEvents(
+                    new StockMenuListener(plugin, stockMarketService, stockMenuService),
+                    plugin
+            );
+        }
     }
 
     private void register(String name, CommandExecutor executor) {

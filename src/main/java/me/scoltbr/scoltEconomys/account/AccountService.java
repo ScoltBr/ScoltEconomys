@@ -10,11 +10,15 @@ import me.scoltbr.scoltEconomys.tax.TaxType;
 import me.scoltbr.scoltEconomys.util.LockOrder;
 import me.scoltbr.scoltEconomys.util.Preconditions;
 import me.scoltbr.scoltEconomys.util.StripedLocks;
+import me.scoltbr.scoltEconomys.api.event.AccountBalanceChangeEvent;
+import me.scoltbr.scoltEconomys.api.event.AccountBalanceChangeEvent.BalanceType;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 import java.time.Instant;
+import java.util.concurrent.ExecutionException;
+import java.util.logging.Level;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantLock;
@@ -113,39 +117,76 @@ public final class AccountService {
     // Wallet (mutations)
     // ----------------------------
 
+    /**
+     * Deposita uma quantia na carteira (wallet) de um jogador.
+     * <p>Esta operação é síncrona e exige que o jogador esteja em cache.</p>
+     *
+     * @param uuid   UUID do jogador.
+     * @param amount Quantia positiva a depositar.
+     */
     public void depositWallet(UUID uuid, double amount) {
         Preconditions.positive(amount, "amount");
         withLock(uuid, () -> {
             PlayerAccount acc = requireCached(uuid);
-            acc.addWallet(amount);
-            cache.markDirty(uuid);
+            double old = acc.wallet();
+            AccountBalanceChangeEvent event = fireBalanceChange(uuid, old, old + amount, BalanceType.WALLET);
+            if (!event.isCancelled()) {
+                acc.setWallet(event.getNewBalance());
+                cache.markDirty(uuid);
+            }
         });
     }
 
+    /**
+     * Retira uma quantia da carteira (wallet) do jogador.
+     *
+     * @param uuid   UUID do jogador.
+     * @param amount Quantia positiva a retirar.
+     * @return true se a retirada foi concluída, false se saldo insuficiente ou cancelada.
+     */
     public boolean withdrawWallet(UUID uuid, double amount) {
         Preconditions.positive(amount, "amount");
         return withLockResult(uuid, () -> {
             PlayerAccount acc = requireCached(uuid);
             if (acc.wallet() < amount) return false;
-            acc.addWallet(-amount);
-            cache.markDirty(uuid);
-            return true;
+            double old = acc.wallet();
+            AccountBalanceChangeEvent event = fireBalanceChange(uuid, old, old - amount, BalanceType.WALLET);
+            if (!event.isCancelled()) {
+                acc.setWallet(event.getNewBalance());
+                cache.markDirty(uuid);
+                return true;
+            }
+            return false;
         });
     }
 
+    /**
+     * Define o saldo da carteira do jogador para um valor absoluto.
+     *
+     * @param uuid  UUID do jogador.
+     * @param value Novo saldo.
+     */
     public void setWallet(UUID uuid, double value) {
         Preconditions.notNegative(value, "value");
         withLock(uuid, () -> {
             PlayerAccount acc = requireCached(uuid);
-            acc.setWallet(value);
-            cache.markDirty(uuid);
+            double old = acc.wallet();
+            AccountBalanceChangeEvent event = fireBalanceChange(uuid, old, value, BalanceType.WALLET);
+            if (!event.isCancelled()) {
+                acc.setWallet(event.getNewBalance());
+                cache.markDirty(uuid);
+            }
         });
     }
 
-    // ----------------------------
-    // Transfer (wallet -> wallet)
-    // ----------------------------
-
+    /**
+     * Transfere valores entre dois jogadores, aplicando impostos e disparando eventos.
+     *
+     * @param from        UUID do remetente.
+     * @param to          UUID do destinatário.
+     * @param grossAmount Valor bruto enviado pelo remetente.
+     * @return Resultado detalhado da transferência.
+     */
     public TransferResult transferWallet(UUID from, UUID to, double grossAmount) {
         Preconditions.positive(grossAmount, "grossAmount");
         if (from.equals(to)) return TransferResult.fail("same-account");
@@ -160,10 +201,21 @@ public final class AccountService {
                 return TransferResult.fail("insufficient-funds");
             }
 
-            fromAcc.addWallet(-grossAmount);
+            // Fira evento for 'from'
+            AccountBalanceChangeEvent eFrom = fireBalanceChange(from, fromAcc.wallet(), fromAcc.wallet() - grossAmount, BalanceType.WALLET);
+            if (eFrom.isCancelled()) {
+                return TransferResult.fail("cancelled-by-api");
+            }
+            // Fira evento for 'to'
+            AccountBalanceChangeEvent eTo = fireBalanceChange(to, toAcc.wallet(), toAcc.wallet() + tax.netAmount(), BalanceType.WALLET);
+            if (eTo.isCancelled()) {
+                return TransferResult.fail("cancelled-by-api");
+            }
+
+            fromAcc.setWallet(eFrom.getNewBalance());
             cache.markDirty(from);
 
-            toAcc.addWallet(tax.netAmount());
+            toAcc.setWallet(eTo.getNewBalance());
             cache.markDirty(to);
 
             treasury.collect(tax.feeAmount());
@@ -208,8 +260,16 @@ public final class AccountService {
             double maxBank = plugin.getConfig().getDouble("bank.max-balance", Double.MAX_VALUE);
             if (acc.bank() + amount > maxBank) return MoveResult.fail("bank-limit");
 
-            acc.addWallet(-amount);
-            acc.addBank(amount);
+            // Evento Carteira (Saída)
+            AccountBalanceChangeEvent eWallet = fireBalanceChange(uuid, acc.wallet(), acc.wallet() - amount, BalanceType.WALLET);
+            if (eWallet.isCancelled()) return MoveResult.fail("cancelled-by-api");
+            
+            // Evento Banco (Entrada)
+            AccountBalanceChangeEvent eBank = fireBalanceChange(uuid, acc.bank(), acc.bank() + amount, BalanceType.BANK);
+            if (eBank.isCancelled()) return MoveResult.fail("cancelled-by-api");
+
+            acc.setWallet(eWallet.getNewBalance());
+            acc.setBank(eBank.getNewBalance());
             cache.markDirty(uuid);
 
             audit.record(
@@ -237,8 +297,16 @@ public final class AccountService {
 
             TaxResult tax = taxManager.apply(TaxType.WITHDRAW, grossAmount);
 
-            acc.addBank(-grossAmount);
-            acc.addWallet(tax.netAmount());
+            // Evento Banco (Saída)
+            AccountBalanceChangeEvent eBank = fireBalanceChange(uuid, acc.bank(), acc.bank() - grossAmount, BalanceType.BANK);
+            if (eBank.isCancelled()) return MoveResult.fail("cancelled-by-api");
+                
+            // Evento Carteira (Entrada)
+            AccountBalanceChangeEvent eWallet = fireBalanceChange(uuid, acc.wallet(), acc.wallet() + tax.netAmount(), BalanceType.WALLET);
+            if (eWallet.isCancelled()) return MoveResult.fail("cancelled-by-api");
+
+            acc.setBank(eBank.getNewBalance());
+            acc.setWallet(eWallet.getNewBalance());
             cache.markDirty(uuid);
 
             treasury.collect(tax.feeAmount());
@@ -311,6 +379,25 @@ public final class AccountService {
     // Internals
     // ----------------------------
 
+    private AccountBalanceChangeEvent fireBalanceChange(UUID uuid, double oldBal, double newBal, BalanceType type) {
+        AccountBalanceChangeEvent event = new AccountBalanceChangeEvent(uuid, oldBal, newBal, type);
+        if (Bukkit.isPrimaryThread()) {
+            Bukkit.getPluginManager().callEvent(event);
+            return event;
+        }
+
+        try {
+            return Bukkit.getScheduler().callSyncMethod(plugin, () -> {
+                Bukkit.getPluginManager().callEvent(event);
+                return event;
+            }).get();
+        } catch (InterruptedException | ExecutionException e) {
+            plugin.getLogger().log(Level.SEVERE, "Failed to fire AccountBalanceChangeEvent synchronously from async thread for " + uuid, e);
+            event.setCancelled(true);
+            return event;
+        }
+    }
+
     private PlayerAccount requireCached(UUID uuid) {
         return cache.get(uuid).orElseThrow(() ->
                 new IllegalStateException("Account not cached for uuid=" + uuid)
@@ -337,21 +424,28 @@ public final class AccountService {
             if (interest > room) interest = room;
             if (interest <= 0) return 0.0;
 
-            acc.addBank(interest);
+            AccountBalanceChangeEvent event = fireBalanceChange(uuid, bank, bank + interest, BalanceType.BANK);
+            if (event.isCancelled())
+                return 0.0;
+
+            acc.setBank(event.getNewBalance());
             cache.markDirty(uuid);
+            
+            // Re-calculate interest effectively applied (in case a listener changed it)
+            double effectivelyAdded = event.getNewBalance() - bank;
 
             audit.record(
                     TransactionType.BANK_INTEREST,
                     null,
                     uuid,
-                    interest,
-                    interest,
+                    effectivelyAdded,
+                    effectivelyAdded,
                     0.0,
                     "scheduler",
                     "bank interest"
             );
 
-            return interest;
+            return effectivelyAdded;
         });
     }
 

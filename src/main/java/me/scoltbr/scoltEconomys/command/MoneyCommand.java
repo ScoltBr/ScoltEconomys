@@ -17,13 +17,16 @@ public final class MoneyCommand implements CommandExecutor {
     private final AccountService accounts;
     private final MoneyTopService topService;
     private final AdminMenuService adminMenuService;
+    private final me.scoltbr.scoltEconomys.event.EventManager eventManager;
 
     public MoneyCommand(AccountService accountService,
             MoneyTopService topService,
-            AdminMenuService adminMenuService) {
+            AdminMenuService adminMenuService,
+            me.scoltbr.scoltEconomys.event.EventManager eventManager) {
         this.accounts = accountService;
         this.topService = topService;
         this.adminMenuService = adminMenuService;
+        this.eventManager = eventManager;
     }
 
     @Override
@@ -48,6 +51,7 @@ public final class MoneyCommand implements CommandExecutor {
             case "sacar"     -> handleWithdraw(player, args);
             case "top"       -> moneyTop(sender);
             case "admin"     -> handleAdmin(player);
+            case "event"     -> handleEvent(player, args);
             default -> {
                 MessageUtils.sendError(player, "Subcomando inválido.");
                 sendHelp(player);
@@ -240,6 +244,68 @@ public final class MoneyCommand implements CommandExecutor {
         return true;
     }
 
+    private boolean handleEvent(Player player, String[] args) {
+        if (!player.hasPermission("scolteconomy.admin")) {
+            MessageUtils.sendError(player, "Você não tem permissão para gerenciar eventos.");
+            return true;
+        }
+
+        if (args.length < 2) {
+            MessageUtils.send(player, "<gold>Gerenciamento de Eventos:</gold>");
+            MessageUtils.send(player, " <yellow>/money event info</yellow> - Status atual");
+            MessageUtils.send(player, " <yellow>/money event list</yellow> - Lista eventos disponíveis");
+            MessageUtils.send(player, " <yellow>/money event start <id></yellow> - Inicia um evento");
+            MessageUtils.send(player, " <yellow>/money event stop</yellow> - Para o evento atual");
+            return true;
+        }
+
+        String action = args[1].toLowerCase(Locale.ROOT);
+        switch (action) {
+            case "info" -> {
+                var active = eventManager.getActiveEvent();
+                if (active.isEmpty()) {
+                    MessageUtils.send(player, "<gray>Nenhum evento econômico ativo no momento.</gray>");
+                } else {
+                    var e = active.get();
+                    MessageUtils.send(player, "<gold><bold>EVENTO ATIVO:</bold></gold> " + e.displayName());
+                    MessageUtils.send(player, " <gray>•</gray> Multiplicador Juros: <yellow>" + e.interestMultiplier() + "x</yellow>");
+                    MessageUtils.send(player, " <gray>•</gray> Multiplicador Taxas: <yellow>" + e.taxMultiplier() + "x</yellow>");
+                    MessageUtils.send(player, " <gray>•</gray> Tempo restante: <aqua>" + (eventManager.getRemainingSeconds() / 60) + " min</aqua>");
+                }
+            }
+            case "list" -> {
+                MessageUtils.send(player, "<gold>Eventos configurados:</gold>");
+                eventManager.getDefinitions().forEach((id, e) -> {
+                    MessageUtils.send(player, " <yellow>• " + id + "</yellow> <gray>(" + e.durationSeconds() / 60 + " min)</gray>");
+                });
+            }
+            case "start" -> {
+                if (args.length < 3) {
+                    MessageUtils.sendError(player, "Uso: /money event start <id>");
+                    return true;
+                }
+                String id = args[2];
+                if (eventManager.startEvent(id)) {
+                    MessageUtils.playSuccess(player);
+                } else {
+                    MessageUtils.sendError(player, "Evento '" + id + "' não encontrado no config.yml.");
+                }
+            }
+            case "stop" -> {
+                if (eventManager.getActiveEvent().isEmpty()) {
+                    MessageUtils.sendError(player, "Não há nenhum evento ativo.");
+                } else {
+                    eventManager.stopEvent();
+                    MessageUtils.playSuccess(player);
+                    MessageUtils.send(player, "<green>Evento encerrado com sucesso.</green>");
+                }
+            }
+            default -> MessageUtils.sendError(player, "Ação desconhecida.");
+        }
+
+        return true;
+    }
+
     private void sendHelp(Player player) {
         MessageUtils.send(player, "<gray>Comandos Básicos de Economia:</gray>");
         player.sendMessage(MessageUtils.parseRaw(
@@ -251,6 +317,11 @@ public final class MoneyCommand implements CommandExecutor {
         player.sendMessage(MessageUtils.parseRaw(
                 " <gray>•</gray> <hover:show_text:'<gray>Clique para retirar do banco'><click:suggest_command:'/money sacar '><aqua>/money sacar</aqua> <white><val></white></click></hover>"));
         player.sendMessage(MessageUtils.parseRaw(
-                " <gray>•</gray> <hover:show_text:'<gray>Ver o ranking bilionário'><click:run_command:'/baltop'><aqua>/baltop</aqua></click></hover>"));
+                " <gray>•</gray> <hover:show_text:'<gray>Ver o ranking bilionário'><click:run_command:'/money top'><aqua>/money top</aqua></click></hover>"));
+        
+        if (player.hasPermission("scolteconomy.admin")) {
+            player.sendMessage(MessageUtils.parseRaw(
+                " <gray>•</gray> <hover:show_text:'<gray>Gerenciar eventos'><click:suggest_command:'/money event '><gold>/money event</gold></click></hover>"));
+        }
     }
 }

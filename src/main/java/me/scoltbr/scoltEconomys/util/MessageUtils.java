@@ -53,4 +53,9 @@ public final class MessageUtils {
     public static void actionBar(Player player, String message) {
         player.sendActionBar(parseRaw(message));
     }
+
+    // Broadcast global formatado
+    public static void broadcast(String message) {
+        org.bukkit.Bukkit.broadcast(format(message));
+    }
 }

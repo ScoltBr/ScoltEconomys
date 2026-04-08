@@ -12,37 +12,31 @@ public final class MoneyFormat {
 
     private MoneyFormat() {}
 
+    private static final String[] SUFFIXES = {
+        "", "K", "M", "B", "T", "Q", "QQ", "SX", "SP", "O", "N", "D", "UN"
+    };
+
     public static String format(double value) {
+        if (Double.isNaN(value) || Double.isInfinite(value)) return "NaN";
+        if (value == 0) return "0";
 
         double abs = Math.abs(value);
+        int index = 0;
+        double scaled = abs;
 
-        if (abs >= 1_000_000_000_000_000_000_000_000_000_000_000_000d) return formatCompact(value, 1_000_000_000_000_000_000_000_000_000_000_000_000d, "UN");
-        if (abs >= 1_000_000_000_000_000_000_000_000_000_000_000d)     return formatCompact(value, 1_000_000_000_000_000_000_000_000_000_000_000d, "D");
-        if (abs >= 1_000_000_000_000_000_000_000_000_000_000d)         return formatCompact(value, 1_000_000_000_000_000_000_000_000_000_000d, "N");
-        if (abs >= 1_000_000_000_000_000_000_000_000_000d)             return formatCompact(value, 1_000_000_000_000_000_000_000_000_000d, "O");
-        if (abs >= 1_000_000_000_000_000_000_000_000d)                 return formatCompact(value, 1_000_000_000_000_000_000_000_000d, "SP");
-        if (abs >= 1_000_000_000_000_000_000_000d)                     return formatCompact(value, 1_000_000_000_000_000_000_000d, "SX");
-        if (abs >= 1_000_000_000_000_000_000d)                         return formatCompact(value, 1_000_000_000_000_000_000d, "QQ");
-        if (abs >= 1_000_000_000_000_000d)
-            return formatCompact(value, 1_000_000_000_000_000d, "Q");
+        while (scaled >= 1000 && index < SUFFIXES.length - 1) {
+            scaled /= 1000.0;
+            index++;
+        }
 
-        if (abs >= 1_000_000_000_000d)
-            return formatCompact(value, 1_000_000_000_000d, "T");
+        // Se o arredondamento resultar em 1000 (ex: 999.999...), promovemos para a próxima unidade
+        String formatted = FORMAT.format(scaled);
+        if (formatted.equals("1,000") && index < SUFFIXES.length - 1) {
+            index++;
+            formatted = "1";
+        }
 
-        if (abs >= 1_000_000_000d)
-            return formatCompact(value, 1_000_000_000d, "B");
-
-        if (abs >= 1_000_000d)
-            return formatCompact(value, 1_000_000d, "M");
-
-        if (abs >= 1_000d)
-            return formatCompact(value, 1_000d, "K");
-
-        return FORMAT.format(value);
+        return (value < 0 ? "-" : "") + formatted + SUFFIXES[index];
     }
 
-    private static String formatCompact(double value, double divisor, String suffix) {
-        double scaled = value / divisor;
-        return new DecimalFormat("#,##0.##", SYMBOLS).format(scaled) + suffix;
-    }
 }

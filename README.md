@@ -1,6 +1,6 @@
 # 💰 ScoltEconomy
 
-Sistema de economia avançado para servidores **Paper 1.21.11+**,
+Sistema de economia avançado para servidores **Paper 1.21.1+**,
 projetado para alta performance, escalabilidade e controle
 administrativo completo.
 
@@ -20,6 +20,7 @@ Desenvolvido com princípios de:
 -   🛢️ Persistência em MySQL
 -   📊 Monitoramento econômico
 -   🔌 Compatibilidade completa com Vault
+-   📡 Sistema de API Pública para desenvolvedores
 
 ------------------------------------------------------------------------
 
@@ -32,6 +33,8 @@ O plugin é dividido em módulos independentes:
 -   `tax/` → Sistema de impostos dinâmicos
 -   `stats/` → Monitoramento e saúde econômica
 -   `admin/` → GUI administrativa
+-   `stock/` → Mercado de Ações (Bolsa de Valores)
+-   `api/` → Interface pública e eventos customizados
 -   `database/` → Conexão MySQL + HikariCP
 -   `scheduler/` → Execução assíncrona segura
 -   `vault/` → Integração completa com Vault API
@@ -43,104 +46,86 @@ O plugin é dividido em módulos independentes:
 ### 💳 Sistema de Contas
 
 -   Wallet e Banco separados
--   Cache em memória
+-   Cache em memória com Caffeine
 -   Salvamento em batch assíncrono
 -   Lock por UUID (thread-safe)
 
-### 💸 Sistema de Pagamentos
+### 📈 Mercado de Ações (Beta)
 
--   `/money pay`
--   Suporte a valores como:
-    -   1K
-    -   2.5M
-    -   1B
-    -   3T
-    -   1Q
+-   Simulação dinâmica baseada em "Drift" e "Pressão"
+-   Setores econômicos com bônus/penalidades
+-   GUI de investimentos intuitiva (`/bolsa`)
+-   Histórico de preços persistente
 
 ### 🏦 Sistema Bancário
 
 -   Depósito e saque
--   Juros configuráveis
--   Taxa de saque
+-   Juros configuráveis e automáticos
+-   Taxa de saque progressiva
 -   Controle anti-inflação
 
 ### 📊 Economia Inteligente
 
--   Cálculo de concentração (Top 10%)
--   Crescimento 24h
--   Snapshot diário
--   Alertas automáticos de inflação
+-   Cálculo de concentração de riqueza
+-   Alertas automáticos de inflação no Admin Panel
+-   Snapshot diário da saúde do servidor
 
-### 🏆 Money Top
+### 🔌 API Pública e Eventos
 
--   Rank 1--10
--   Baseado em wallet + banco
--   Consulta otimizada no MySQL
--   Formatação compacta automática (1B, 2T, etc)
+-   Eventos canceláveis para integração (ex: BalanceChange)
+-   Acesso simplificado via `ScoltAPI.get()`
+-   Documentação Javadoc em todos os métodos
 
-### 🧾 Sistema de Impostos
+------------------------------------------------------------------------
 
--   Transferência
--   Saque
--   Ajustável via GUI em tempo real
--   Persistência automática em config
+## 🛠️ Para Desenvolvedores
 
-### 🖥️ GUI Administrativa
+### Dependência (Maven)
 
--   Painel econômico completo
--   Estatísticas globais
--   Alertas
--   Ajuste de impostos
--   Atualização dinâmica
+```xml
+<dependency>
+    <groupId>me.scoltbr</groupId>
+    <artifactId>scolteconomy</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <scope>provided</scope>
+</dependency>
+```
 
-### 🔌 Compatibilidade Vault
+### Usando a API
 
--   Provider Economy completo
--   Suporte a OfflinePlayer
--   Integração com plugins de loja, ranks, etc
+```java
+// Obter a instância da API
+ScoltEconomyAPI api = ScoltAPI.get();
+
+// Consultar saldo de forma assíncrona
+api.getWalletAsync(uuid, balance -> {
+    player.sendMessage("Saldo: " + balance);
+});
+
+// Transferência com taxas
+api.transfer(from, to, 1000.0, result -> {
+    if (result.success()) {
+        System.out.println("Enviado! Taxa retida: " + result.fee());
+    }
+});
+```
+
+### Eventos Disponíveis
+
+-   `AccountBalanceChangeEvent`: Disparado em qualquer alteração de saldo. Pode ser cancelado.
+-   `StockPriceUpdateEvent`: Disparado quando o preço de uma ação oscila.
+-   `StockTransactionEvent`: Disparado após uma compra ou venda de ações.
 
 ------------------------------------------------------------------------
 
 ## ⚙️ Tecnologias Utilizadas
 
 -   Java 21
--   Paper API 1.21.11
+-   Paper API 1.21.1+
 -   Maven
--   MySQL
--   HikariCP (connection pooling)
+-   MySQL + HikariCP
+-   Caffeine Cache
 -   Vault API
--   Arquitetura orientada a serviços
--   Execução assíncrona controlada
--   Design modular escalável
-
-------------------------------------------------------------------------
-
-## 📈 Performance
-
--   Nenhuma query MySQL na main thread
--   Batch saving configurável
--   Cache em memória para operações críticas
--   Suporte real para 300+ jogadores
-
-------------------------------------------------------------------------
-
-## 🧠 Diferenciais Técnicos
-
--   Separação clara de responsabilidades
--   Thread-safety com AtomicBoolean e locks por UUID
--   Snapshot econômico persistente
--   Sistema preparado para expansão (empresas, mercado dinâmico,
-    redistribuição automática)
-
-------------------------------------------------------------------------
-
-## 📌 Roadmap
-
--   Sistema de Empresas
--   Mercado Dinâmico (oferta e demanda)
--   Sistema Anti-Lavagem
--   Redistribuição progressiva
--   Gráficos econômicos avançados
 
 ------------------------------------------------------------------------
 

@@ -49,7 +49,7 @@ audit:
 
 bank:
   enabled: true
-  max-balance: 1.0E9
+  max-balance: 1.0E308 # Max Double
 
   interest:
     enabled: true
@@ -70,3 +70,100 @@ alerts:
   concentration-high: 0.7
   # Total coins mínimo para começar a alertar (evita falso positivo em servidor vazio)
   min-total-coins: 100000.0
+
+# ==========================================
+# Sistema de Eventos Econômicos Ativos
+# ==========================================
+# Permite que o servidor entre em estados especiais temporários
+# (ex: Juros Dobrados, Impostos Zero).
+events:
+  enabled: true
+  auto:
+    # Habilitar o disparador automático de eventos aleatórios
+    enabled: true
+    # Intervalo de checagem em segundos (ex: 4 horas)
+    interval-seconds: 14400
+    # Chance (0.0 a 1.0) do evento ocorrer a cada checagem
+    probability: 0.3
+  definitions:
+    juros-dobro:
+      name: "<gold><bold>JUROS EM DOBRO</bold></gold>"
+      interest-multiplier: 2.0
+      tax-multiplier: 1.0
+      duration: 3600 # 1 hora
+    paraiso-fiscal:
+      name: "<aqua><bold>PARAÍSO FISCAL</bold></aqua>"
+      interest-multiplier: 1.0
+      tax-multiplier: 0.0 # Sem taxas
+      duration: 1800 # 30 min
+    estimulo-poupanca:
+      name: "<green><bold>ESTÍMULO À POUPANÇA</bold></green>"
+      interest-multiplier: 1.5
+      tax-multiplier: 1.2 # Taxas de saque aumentam levemente para desencorajar retiradas
+      duration: 7200 # 2 horas
+    dia-do-comercio:
+      name: "<yellow><bold>DIA DO COMÉRCIO</bold></yellow>"
+      interest-multiplier: 0.5 # Juros caem para incentivar gasto
+      tax-multiplier: 0.2 # Taxas de transferência quase nulas
+      duration: 3600 # 1 hora
+    bonificacao-bancaria:
+      name: "<light_purple><bold>BONIFICAÇÃO BANCÁRIA</bold></light_purple>"
+      interest-multiplier: 3.0 # Juros altíssimos por curto tempo
+      tax-multiplier: 1.0
+      duration: 600 # 10 min
+      # Bônus ou penalidades de preço por setor durante o evento
+      sector-boosts:
+        bancario: 0.06   # +6% por tick para ações bancárias
+
+# ==========================================
+# Mercado de Ações Virtual (Bolsa de Valores)
+# ==========================================
+# Simula uma bolsa de valores com empresas fictícias e oscilação dinâmica
+stock-market:
+  enabled: true
+  # Frequência da oscilação de preços
+  tick-interval-seconds: 300
+  # Influência das ordens de compra/venda na variação de preço (Pressão)
+  pressure-factor: 0.10
+  # Variação máxima permitida por tick (ex: 0.15 = 15%)
+  max-price-change-pct: 0.15
+  # Preço mínimo de segurança
+  min-price: 0.01
+  # Taxa retida no bolso do servidor (Tesouro) ao comprar/vender
+  brokerage-fee: 0.01
+  # Quantidade de pontos históricos armazenados para o gráfico/lista
+  history-keep: 48
+
+  companies:
+    scolt-bank:
+      name: "<aqua><b>ScoltBank S.A.</b></aqua>"
+      sector: "bancario"
+      initial-price: 150.0
+      # Drift natural (baixa volatilidade = 0.04)
+      volatility: 0.04
+      total-shares: 500000
+      brokerage-fee: 0.01
+
+    trade-corp:
+      name: "<yellow><b>TradeCorp Ltda.</b></yellow>"
+      sector: "comercio"
+      initial-price: 80.0
+      volatility: 0.08
+      total-shares: 750000
+      brokerage-fee: 0.01
+
+    minas-gerais:
+      name: "<gray><b>MinasGerais S.A.</b></gray>"
+      sector: "mineracao"
+      initial-price: 45.0
+      volatility: 0.12
+      total-shares: 1000000
+      brokerage-fee: 0.015
+
+    farma-plus:
+      name: "<green><b>FarmaPlus Corp.</b></green>"
+      sector: "farmaceutico"
+      initial-price: 200.0
+      volatility: 0.05
+      total-shares: 300000
+      brokerage-fee: 0.01

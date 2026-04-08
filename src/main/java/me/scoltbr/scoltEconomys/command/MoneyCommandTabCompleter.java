@@ -16,7 +16,8 @@ import java.util.stream.Collectors;
 
 public final class MoneyCommandTabCompleter implements TabCompleter {
 
-    private static final List<String> SUBCOMMANDS = Arrays.asList("enviar", "depositar", "sacar", "top");
+    private static final List<String> SUBCOMMANDS = Arrays.asList("enviar", "depositar", "sacar", "top", "admin", "event");
+    private static final List<String> EVENT_ACTIONS = Arrays.asList("info", "list", "start", "stop");
 
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
@@ -35,6 +36,22 @@ public final class MoneyCommandTabCompleter implements TabCompleter {
                         .map(Player::getName)
                         .filter(n -> n.toLowerCase(Locale.ROOT).startsWith(partial))
                         .collect(Collectors.toList());
+            }
+            if (sub.equals("event")) {
+                String partial = args[1].toLowerCase(Locale.ROOT);
+                return EVENT_ACTIONS.stream()
+                        .filter(s -> s.startsWith(partial))
+                        .collect(Collectors.toList());
+            }
+        }
+        
+        if (args.length == 3) {
+            String sub = args[0].toLowerCase(Locale.ROOT);
+            String action = args[1].toLowerCase(Locale.ROOT);
+            if (sub.equals("event") && action.equals("start")) {
+                // Infelizmente o TabCompleter não tem acesso ao EventManager fácil aqui sem injeção
+                // Mas podemos sugerir os IDs fixos se quisermos, ou deixar vazio.
+                return new ArrayList<>(); 
             }
         }
 

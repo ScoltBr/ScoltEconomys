@@ -8,12 +8,17 @@ import java.util.Map;
 public final class TaxManager {
 
     private final Map<TaxType, TaxPolicy> policies = new EnumMap<>(TaxType.class);
+    private me.scoltbr.scoltEconomys.event.EventManager eventManager;
 
     public TaxManager(ConfigurationSection config) {
         if (config == null) return;
 
         loadTransfer(config.getConfigurationSection("transfer"));
         loadWithdraw(config.getConfigurationSection("withdraw"));
+    }
+
+    public void setEventManager(me.scoltbr.scoltEconomys.event.EventManager eventManager) {
+        this.eventManager = eventManager;
     }
 
     private void loadTransfer(ConfigurationSection section) {
@@ -51,6 +56,12 @@ public final class TaxManager {
         }
 
         double fee = grossAmount * policy.rate();
+        
+        // Aplica multiplicador do evento ativo
+        if (eventManager != null) {
+            fee *= eventManager.getTaxMultiplier();
+        }
+        
         fee = Math.max(policy.minFee(), Math.min(policy.maxFee(), fee));
 
         if (fee > grossAmount) fee = grossAmount;
