@@ -16,16 +16,17 @@ public final class MoneyFormat {
         "", "K", "M", "B", "T", "Q", "QQ", "SX", "SP", "O", "N", "D", "UN"
     };
 
-    public static String format(double value) {
-        if (Double.isNaN(value) || Double.isInfinite(value)) return "NaN";
-        if (value == 0) return "0";
+    public static String format(java.math.BigDecimal value) {
+        if (value == null) return "NaN";
+        if (value.compareTo(java.math.BigDecimal.ZERO) == 0) return "0";
 
-        double abs = Math.abs(value);
+        java.math.BigDecimal abs = value.abs();
         int index = 0;
-        double scaled = abs;
+        java.math.BigDecimal scaled = abs;
 
-        while (scaled >= 1000 && index < SUFFIXES.length - 1) {
-            scaled /= 1000.0;
+        java.math.BigDecimal thousand = java.math.BigDecimal.valueOf(1000);
+        while (scaled.compareTo(thousand) >= 0 && index < SUFFIXES.length - 1) {
+            scaled = scaled.divide(thousand, 2, java.math.RoundingMode.HALF_UP);
             index++;
         }
 
@@ -36,7 +37,7 @@ public final class MoneyFormat {
             formatted = "1";
         }
 
-        return (value < 0 ? "-" : "") + formatted + SUFFIXES[index];
+        return (value.compareTo(java.math.BigDecimal.ZERO) < 0 ? "-" : "") + formatted + SUFFIXES[index];
     }
 
 }

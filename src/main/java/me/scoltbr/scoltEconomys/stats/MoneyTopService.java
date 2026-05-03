@@ -39,5 +39,6 @@ public final class MoneyTopService {
         });
     }
 
-    public record TopLine(String name, double total) {}
-}
+    public record TopLine(String name, java.math.BigDecimal total) {
+    }
+}

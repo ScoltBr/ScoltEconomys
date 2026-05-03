@@ -1,5 +1,6 @@
 package me.scoltbr.scoltEconomys.audit;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -8,9 +9,9 @@ public record TransactionRecord(
         TransactionType type,
         UUID from,
         UUID to,
-        double gross,
-        double net,
-        double fee,
+        BigDecimal gross,
+        BigDecimal net,
+        BigDecimal fee,
         String source,
         String note
 ) {}

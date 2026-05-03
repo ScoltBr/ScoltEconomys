@@ -4,6 +4,8 @@ import me.scoltbr.scoltEconomys.account.AccountRepository;
 import org.bukkit.Bukkit;
 
 import java.time.Instant;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 public final class EconomyCalculator {
 
@@ -17,12 +19,14 @@ public final class EconomyCalculator {
 
         var data = repo.getGlobalEconomyData();
 
-        double total = data.totalWallet() + data.totalBank();
+        BigDecimal total = data.totalWallet().add(data.totalBank());
 
         int activePlayers = Bukkit.getOnlinePlayers().size();
-        double avgPerActive = activePlayers == 0 ? 0.0 : total / activePlayers;
+        BigDecimal avgPerActive = activePlayers == 0 ? BigDecimal.ZERO : total.divide(BigDecimal.valueOf(activePlayers), 2, RoundingMode.HALF_UP);
 
-        double concentration = total <= 0 ? 0.0 : (data.top10Wealth() / total);
+        BigDecimal concentration = total.compareTo(BigDecimal.ZERO) <= 0
+                ? BigDecimal.ZERO
+                : data.top10Wealth().divide(total, 4, RoundingMode.HALF_UP);
 
         return new EconomySnapshot(
                 Instant.now(),

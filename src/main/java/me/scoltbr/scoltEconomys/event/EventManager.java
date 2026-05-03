@@ -16,8 +16,8 @@ public final class EventManager {
     private final Plugin plugin;
     private final Map<String, EconomyEvent> definitions = new HashMap<>();
 
-    private EconomyEvent activeEvent = null;
-    private long endTime = 0;
+    private volatile EconomyEvent activeEvent = null;
+    private volatile long endTime = 0;
     private BukkitTask expirationTask = null;
 
     public EventManager(Plugin plugin) {

@@ -113,7 +113,7 @@ public final class MoneyCommand implements CommandExecutor {
 
     private boolean handlePay(Player from, String[] args) {
         if (args.length < 3) {
-            MessageUtils.sendError(from, "Uso incorreto. Utilize o menu ou /money enviar <jogador> <valor>");
+            MessageUtils.sendError(from, "Uso incorreto. Utilize o menu ou /money enviar \\<jogador\\> \\<valor\\>");
             return true;
         }
 
@@ -128,15 +128,24 @@ public final class MoneyCommand implements CommandExecutor {
             return true;
         }
 
-        double amount;
-        try {
-            amount = MoneyParser.parse(args[2]);
-        } catch (Exception e) {
-            MessageUtils.sendError(from, "Valor inválido inserido.");
-            return true;
-        }
-
         accounts.getOrLoad(from.getUniqueId(), fromAcc -> {
+            java.math.BigDecimal amount;
+            if (args[2].equalsIgnoreCase("all") || args[2].equalsIgnoreCase("tudo") || args[2].equals("*")) {
+                amount = fromAcc.wallet();
+            } else {
+                try {
+                    amount = MoneyParser.parse(args[2]);
+                } catch (Exception e) {
+                    MessageUtils.sendError(from, "Valor numérico inválido.");
+                    return;
+                }
+            }
+
+            if (amount.compareTo(java.math.BigDecimal.ZERO) <= 0) {
+                MessageUtils.sendError(from, "Você não possui fundos na carteira para enviar.");
+                return;
+            }
+
             accounts.getOrLoad(to.getUniqueId(), toAcc -> {
 
                 var result = accounts.transferWallet(from.getUniqueId(), to.getUniqueId(), amount);
@@ -156,7 +165,7 @@ public final class MoneyCommand implements CommandExecutor {
                 MessageUtils.playSuccess(from);
                 MessageUtils.actionBar(from, "<red>-$ " + formattedNet + "</red>");
 
-                if (result.fee() > 0) {
+                if (result.fee().compareTo(java.math.BigDecimal.ZERO) > 0) {
                     MessageUtils.send(from,
                             "<gray>Imposto retido: <white>$ " + MoneyFormat.format(result.fee()) + "</white></gray>");
                 }
@@ -173,19 +182,28 @@ public final class MoneyCommand implements CommandExecutor {
 
     private boolean handleDeposit(Player player, String[] args) {
         if (args.length < 2) {
-            MessageUtils.sendError(player, "Uso: /money depositar <quantidade>");
-            return true;
-        }
-
-        double amount;
-        try {
-            amount = MoneyParser.parse(args[1]);
-        } catch (Exception e) {
-            MessageUtils.sendError(player, "Valor inválido.");
+            MessageUtils.sendError(player, "Uso: /money depositar \\<quantidade|all\\>");
             return true;
         }
 
         accounts.getOrLoad(player.getUniqueId(), acc -> {
+            java.math.BigDecimal amount;
+            if (args[1].equalsIgnoreCase("all") || args[1].equalsIgnoreCase("tudo") || args[1].equals("*")) {
+                amount = acc.wallet();
+            } else {
+                try {
+                    amount = MoneyParser.parse(args[1]);
+                } catch (Exception e) {
+                    MessageUtils.sendError(player, "Valor numérico inválido.");
+                    return;
+                }
+            }
+
+            if (amount.compareTo(java.math.BigDecimal.ZERO) <= 0) {
+                MessageUtils.sendError(player, "Você não tem fundos na carteira para depositar.");
+                return;
+            }
+
             var res = accounts.depositToBank(player.getUniqueId(), amount);
 
             if (!res.success()) {
@@ -208,19 +226,28 @@ public final class MoneyCommand implements CommandExecutor {
 
     private boolean handleWithdraw(Player player, String[] args) {
         if (args.length < 2) {
-            MessageUtils.sendError(player, "Uso: /money sacar <valor>");
-            return true;
-        }
-
-        double amount;
-        try {
-            amount = MoneyParser.parse(args[1]);
-        } catch (Exception e) {
-            MessageUtils.sendError(player, "Valor inválido inserido.");
+            MessageUtils.sendError(player, "Uso: /money sacar \\<valor|all\\>");
             return true;
         }
 
         accounts.getOrLoad(player.getUniqueId(), acc -> {
+            java.math.BigDecimal amount;
+            if (args[1].equalsIgnoreCase("all") || args[1].equalsIgnoreCase("tudo") || args[1].equals("*")) {
+                amount = acc.bank();
+            } else {
+                try {
+                    amount = MoneyParser.parse(args[1]);
+                } catch (Exception e) {
+                    MessageUtils.sendError(player, "Valor numérico inválido.");
+                    return;
+                }
+            }
+
+            if (amount.compareTo(java.math.BigDecimal.ZERO) <= 0) {
+                MessageUtils.sendError(player, "Você não tem fundos no banco para sacar.");
+                return;
+            }
+
             var res = accounts.withdrawFromBank(player.getUniqueId(), amount);
 
             if (!res.success()) {
@@ -235,7 +262,7 @@ public final class MoneyCommand implements CommandExecutor {
                     "<green>Você sacou <white>$ " + MoneyFormat.format(res.net()) + "</white> do seu banco.</green>");
             MessageUtils.playSuccess(player);
 
-            if (res.fee() > 0) {
+            if (res.fee().compareTo(java.math.BigDecimal.ZERO) > 0) {
                 MessageUtils.send(player,
                         "<gray>Imposto de Renda: <white>$ " + MoneyFormat.format(res.fee()) + "</white></gray>");
             }
@@ -254,7 +281,7 @@ public final class MoneyCommand implements CommandExecutor {
             MessageUtils.send(player, "<gold>Gerenciamento de Eventos:</gold>");
             MessageUtils.send(player, " <yellow>/money event info</yellow> - Status atual");
             MessageUtils.send(player, " <yellow>/money event list</yellow> - Lista eventos disponíveis");
-            MessageUtils.send(player, " <yellow>/money event start <id></yellow> - Inicia um evento");
+            MessageUtils.send(player, " <yellow>/money event start \\<id\\></yellow> - Inicia um evento");
             MessageUtils.send(player, " <yellow>/money event stop</yellow> - Para o evento atual");
             return true;
         }
@@ -281,7 +308,7 @@ public final class MoneyCommand implements CommandExecutor {
             }
             case "start" -> {
                 if (args.length < 3) {
-                    MessageUtils.sendError(player, "Uso: /money event start <id>");
+                    MessageUtils.sendError(player, "Uso: /money event start \\<id\\>");
                     return true;
                 }
                 String id = args[2];
@@ -311,11 +338,11 @@ public final class MoneyCommand implements CommandExecutor {
         player.sendMessage(MessageUtils.parseRaw(
                 " <gray>•</gray> <hover:show_text:'<gray>Ver meu próprio saldo'><click:run_command:'/money'><aqua>/money</aqua></click></hover>"));
         player.sendMessage(MessageUtils.parseRaw(
-                " <gray>•</gray> <hover:show_text:'<gray>Clique para enviar a um amigo'><click:suggest_command:'/money enviar '><aqua>/money enviar</aqua> <white><jog><val></white></click></hover>"));
+                " <gray>•</gray> <hover:show_text:'<gray>Clique para enviar a um amigo'><click:suggest_command:'/money enviar '><aqua>/money enviar</aqua> <white>\\<jog\\>\\<val\\></white></click></hover>"));
         player.sendMessage(MessageUtils.parseRaw(
-                " <gray>•</gray> <hover:show_text:'<gray>Clique para guardar no banco'><click:suggest_command:'/money depositar '><aqua>/money depositar</aqua> <white><val></white></click></hover>"));
+                " <gray>•</gray> <hover:show_text:'<gray>Clique para guardar no banco'><click:suggest_command:'/money depositar '><aqua>/money depositar</aqua> <white>\\<val\\></white></click></hover>"));
         player.sendMessage(MessageUtils.parseRaw(
-                " <gray>•</gray> <hover:show_text:'<gray>Clique para retirar do banco'><click:suggest_command:'/money sacar '><aqua>/money sacar</aqua> <white><val></white></click></hover>"));
+                " <gray>•</gray> <hover:show_text:'<gray>Clique para retirar do banco'><click:suggest_command:'/money sacar '><aqua>/money sacar</aqua> <white>\\<val\\></white></click></hover>"));
         player.sendMessage(MessageUtils.parseRaw(
                 " <gray>•</gray> <hover:show_text:'<gray>Ver o ranking bilionário'><click:run_command:'/money top'><aqua>/money top</aqua></click></hover>"));
         

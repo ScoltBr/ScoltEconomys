@@ -1,6 +1,7 @@
 package me.scoltbr.scoltEconomys.account;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 /** Linha do ranking. {@code name} pode ser null se o jogador nunca salvou o nome. */
-public record TopBalanceRow(UUID uuid, String name, double total) {}
+public record TopBalanceRow(UUID uuid, String name, BigDecimal total) {}

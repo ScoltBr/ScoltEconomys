@@ -43,12 +43,12 @@ public final class AdminStatsService {
 
         if (t.isEmpty() || y.isEmpty()) return Optional.empty();
 
-        double todayTotal = t.get().totalCoins();
-        double yTotal = y.get().totalCoins();
+        java.math.BigDecimal todayTotal = t.get().totalCoins();
+        java.math.BigDecimal yTotal = y.get().totalCoins();
 
-        if (yTotal <= 0.0) return Optional.empty();
+        if (yTotal.compareTo(java.math.BigDecimal.ZERO) <= 0) return Optional.empty();
 
-        return Optional.of((todayTotal - yTotal) / yTotal);
+        return Optional.of(todayTotal.subtract(yTotal).divide(yTotal, 4, java.math.RoundingMode.HALF_UP).doubleValue());
     }
 
     /**

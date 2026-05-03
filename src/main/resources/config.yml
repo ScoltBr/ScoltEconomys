@@ -167,3 +167,81 @@ stock-market:
       volatility: 0.05
       total-shares: 300000
       brokerage-fee: 0.01
+
+# ==========================================
+# Mercado Global de Commodities
+# ==========================================
+commodity-market:
+  enabled: true
+  tick-interval-seconds: 180
+  brokerage-fee: 0.02
+  pressure-factor: 0.08
+  mean-reversion-rate: 0.03
+  min-price-ratio: 0.20
+  max-price-ratio: 5.00
+  history-keep: 96
+
+  commodities:
+
+    carvao:
+      name: "<gray><b>Carvão</b></gray>"
+      material: COAL
+      sector: energia
+      initial-price: 5.00
+      volatility: 0.08
+      max-per-transaction: 1000
+      brokerage-fee: 0.02
+
+    petroleo:
+      name: "<dark_gray><b>Petróleo Bruto</b></dark_gray>"
+      material: COAL_BLOCK
+      sector: energia
+      initial-price: 45.00
+      volatility: 0.12
+      max-per-transaction: 100
+      brokerage-fee: 0.03
+
+    ferro:
+      name: "<white><b>Lingote de Ferro</b></white>"
+      material: IRON_INGOT
+      sector: metais
+      initial-price: 8.00
+      volatility: 0.06
+      max-per-transaction: 500
+      brokerage-fee: 0.02
+
+    ouro:
+      name: "<gold><b>Lingote de Ouro</b></gold>"
+      material: GOLD_INGOT
+      sector: metais
+      initial-price: 30.00
+      volatility: 0.10
+      max-per-transaction: 200
+      brokerage-fee: 0.025
+
+    diamante:
+      name: "<aqua><b>Diamante</b></aqua>"
+      material: DIAMOND
+      sector: raros
+      initial-price: 150.00
+      volatility: 0.05
+      max-per-transaction: 50
+      brokerage-fee: 0.02
+
+    esmeralda:
+      name: "<green><b>Esmeralda</b></green>"
+      material: EMERALD
+      sector: raros
+      initial-price: 80.00
+      volatility: 0.07
+      max-per-transaction: 100
+      brokerage-fee: 0.02
+
+    netherite:
+      name: "<dark_purple><b>Lingote de Netherite</b></dark_purple>"
+      material: NETHERITE_INGOT
+      sector: raros
+      initial-price: 500.00
+      volatility: 0.04
+      max-per-transaction: 10
+      brokerage-fee: 0.025

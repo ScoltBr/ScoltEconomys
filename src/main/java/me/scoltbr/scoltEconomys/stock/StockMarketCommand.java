@@ -118,7 +118,7 @@ public final class StockMarketCommand implements CommandExecutor {
             MessageUtils.send(player,
                     "<green>✔ Compra realizada! <white>" + result.qty() + "x " +
                     "<aqua>" + id + "</aqua> por <white>$" + MoneyFormat.format(result.totalPaid()));
-            if (result.fee() > 0)
+            if (result.fee().compareTo(java.math.BigDecimal.ZERO) > 0)
                 MessageUtils.send(player, "<gray>Corretagem: <yellow>$" + MoneyFormat.format(result.fee()));
             MessageUtils.playSuccess(player);
         });
@@ -153,35 +153,25 @@ public final class StockMarketCommand implements CommandExecutor {
             }
         }
 
-        final long finalQty = qty;
-        stockService.getPortfolioAsync(player.getUniqueId(), holdings -> {
-            StockHolding holding = holdings.get(id);
-            long toSell = sellAll ? (holding != null ? holding.quantity() : 0) : finalQty;
-
-            if (toSell <= 0) {
-                MessageUtils.sendError(player, "Você não possui ações desta empresa.");
+        final long finalQty = sellAll ? -1 : qty;
+        stockService.sellAsync(player.getUniqueId(), id, finalQty, result -> {
+            if (!result.success()) {
+                String msg = switch (result.reason()) {
+                    case "insufficient-holding" -> "Você não possui ações suficientes para vender.";
+                    default -> "Erro: " + result.reason();
+                };
+                MessageUtils.sendError(player, msg);
                 return;
             }
-
-            stockService.sellAsync(player.getUniqueId(), id, toSell, result -> {
-                if (!result.success()) {
-                    String msg = switch (result.reason()) {
-                        case "insufficient-holding" -> "Você não possui ações suficientes para vender.";
-                        default -> "Erro: " + result.reason();
-                    };
-                    MessageUtils.sendError(player, msg);
-                    return;
-                }
-                String profitColor = result.profit() >= 0 ? "<green>" : "<red>";
-                MessageUtils.send(player,
-                        "<green>✔ Venda realizada! <white>" + result.qty() + "x " +
-                        "<aqua>" + id + "</aqua> — Recebeu <white>$" + MoneyFormat.format(result.net()));
-                MessageUtils.send(player,
-                        "<gray>P&L: " + profitColor + "$" + MoneyFormat.format(result.profit()));
-                if (result.fee() > 0)
-                    MessageUtils.send(player, "<gray>Corretagem: <yellow>$" + MoneyFormat.format(result.fee()));
-                MessageUtils.playSuccess(player);
-            });
+            String profitColor = result.profit().compareTo(java.math.BigDecimal.ZERO) >= 0 ? "<green>" : "<red>";
+            MessageUtils.send(player,
+                    "<green>✔ Venda realizada! <white>" + result.qty() + "x " +
+                    "<aqua>" + id + "</aqua> — Recebeu <white>$" + MoneyFormat.format(result.net()));
+            MessageUtils.send(player,
+                    "<gray>P&L: " + profitColor + "$" + MoneyFormat.format(result.profit()));
+            if (result.fee().compareTo(java.math.BigDecimal.ZERO) > 0)
+                MessageUtils.send(player, "<gray>Corretagem: <yellow>$" + MoneyFormat.format(result.fee()));
+            MessageUtils.playSuccess(player);
         });
         return true;
     }
@@ -244,7 +234,8 @@ public final class StockMarketCommand implements CommandExecutor {
                     MessageUtils.sendError(player, "Empresa '" + id + "' não encontrada.");
                     return true;
                 }
-                // Reseta para o preço inicial via tick forçado com drift zero (simplificação: edita internamente)
+                // Reseta para o preço inicial
+                stockService.resetPrice(id);
                 MessageUtils.send(player,
                         "<green>Preço de <aqua>" + id + "</aqua> resetado para <white>$" +
                         MoneyFormat.format(stock.initialPrice()) + "<green>.");
@@ -268,17 +259,17 @@ public final class StockMarketCommand implements CommandExecutor {
     private void sendHelp(Player player) {
         MessageUtils.send(player, "<gold><b>Mercado de Ações — Comandos:</b></gold>");
         MessageUtils.send(player, " <aqua>/bolsa</aqua> <gray>— Abre a bolsa de valores");
-        MessageUtils.send(player, " <aqua>/bolsa info <id></aqua> <gray>— Detalhes de uma empresa");
-        MessageUtils.send(player, " <aqua>/bolsa comprar <id> <qtd></aqua> <gray>— Comprar ações");
-        MessageUtils.send(player, " <aqua>/bolsa vender <id> <qtd|all></aqua> <gray>— Vender ações");
+        MessageUtils.send(player, " <aqua>/bolsa info \\<id\\></aqua> <gray>— Detalhes de uma empresa");
+        MessageUtils.send(player, " <aqua>/bolsa comprar \\<id\\> \\<qtd\\></aqua> <gray>— Comprar ações");
+        MessageUtils.send(player, " <aqua>/bolsa vender \\<id\\> \\<qtd|all\\></aqua> <gray>— Vender ações");
         MessageUtils.send(player, " <aqua>/bolsa carteira</aqua> <gray>— Seu portfólio de investimentos");
-        MessageUtils.send(player, " <aqua>/bolsa top <id></aqua> <gray>— Top 10 maiores acionistas");
+        MessageUtils.send(player, " <aqua>/bolsa top \\<id\\></aqua> <gray>— Top 10 maiores acionistas");
     }
 
     private void sendAdminHelp(Player player) {
         MessageUtils.send(player, "<gold><b>Bolsa — Admin:</b></gold>");
         MessageUtils.send(player, " <yellow>/bolsa admin list</yellow> <gray>— Lista todas as empresas");
         MessageUtils.send(player, " <yellow>/bolsa admin forcetick</yellow> <gray>— Força oscilação imediata");
-        MessageUtils.send(player, " <yellow>/bolsa admin reset <id></yellow> <gray>— Reseta preço ao inicial");
+        MessageUtils.send(player, " <yellow>/bolsa admin reset \\<id\\></yellow> <gray>— Reseta preço ao inicial");
     }
 }

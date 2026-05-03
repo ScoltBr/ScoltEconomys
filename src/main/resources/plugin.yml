@@ -18,9 +18,16 @@ commands:
   bolsa:
     description: Mercado de Ações Virtual
     usage: /bolsa [subcomando]
+  commodities:
+    description: Mercado Global de Commodities (petróleo, minérios, etc.)
+    usage: /commodities [listar|preco|vender] [...]
+    aliases: [commodity, commodites, comm, mercado]
 permissions:
   scolteconomy.admin:
     default: op
   scolteconomy.stock:
     description: Permite usar o Mercado de Ações
+    default: true
+  scolteconomy.commodity:
+    description: Permite usar o Mercado de Commodities
     default: true

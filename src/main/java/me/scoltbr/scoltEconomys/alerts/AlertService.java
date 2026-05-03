@@ -26,7 +26,7 @@ public final class AlertService {
         double minTotal = plugin.getConfig().getDouble("alerts.min-total-coins", 0.0);
 
         // Se economia ainda é muito pequena, limpa alertas e sai
-        if (snap.totalCoins() < minTotal) {
+        if (snap.totalCoins().compareTo(java.math.BigDecimal.valueOf(minTotal)) < 0) {
             active.clear();
             return;
         }
@@ -45,9 +45,9 @@ public final class AlertService {
         }, () -> active.remove(AlertType.HIGH_GROWTH_24H));
 
         // 2) concentração top 10%
-        if (snap.top10Concentration() >= concentrationLimit) {
+        if (snap.top10Concentration().compareTo(java.math.BigDecimal.valueOf(concentrationLimit)) >= 0) {
             upsert(AlertType.HIGH_CONCENTRATION_TOP10,
-                    "Concentração Top 10% alta: " + pct(snap.top10Concentration()) +
+                    "Concentração Top 10% alta: " + pct(snap.top10Concentration().doubleValue()) +
                             " (limite " + pct(concentrationLimit) + ")");
         } else {
             active.remove(AlertType.HIGH_CONCENTRATION_TOP10);

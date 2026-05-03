@@ -11,12 +11,10 @@ public final class AsyncExecutor {
     private final ExecutorService pool;
 
     public AsyncExecutor(Plugin plugin) {
-        int threads = Math.max(2, Runtime.getRuntime().availableProcessors() / 2);
-        this.pool = Executors.newFixedThreadPool(threads, r -> {
-            Thread t = new Thread(r, plugin.getName() + "-async");
-            t.setDaemon(true);
-            return t;
-        });
+        // Utilizando Virtual Threads (Java 21) para máxima performance em I/O assíncrono (Database, etc)
+        this.pool = Executors.newThreadPerTaskExecutor(
+                Thread.ofVirtual().name(plugin.getName() + "-async-", 0).factory()
+        );
     }
 
     public void runAsync(Runnable task) {

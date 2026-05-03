@@ -1,13 +1,14 @@
 package me.scoltbr.scoltEconomys.stats;
 
 import java.time.Instant;
+import java.math.BigDecimal;
 
 public record EconomySnapshot(
         Instant at,
-        double totalCoins,
-        double totalWallet,
-        double totalBank,
+        BigDecimal totalCoins,
+        BigDecimal totalWallet,
+        BigDecimal totalBank,
         int activePlayers,
-        double averagePerActivePlayer,
-        double top10Concentration
+        BigDecimal averagePerActivePlayer,
+        BigDecimal top10Concentration
 ) {}

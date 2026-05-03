@@ -37,6 +37,11 @@ public final class MoneyCommandTabCompleter implements TabCompleter {
                         .filter(n -> n.toLowerCase(Locale.ROOT).startsWith(partial))
                         .collect(Collectors.toList());
             }
+            if (sub.equals("depositar") || sub.equals("sacar")) {
+                if ("all".startsWith(args[1].toLowerCase(Locale.ROOT))) {
+                    return List.of("all");
+                }
+            }
             if (sub.equals("event")) {
                 String partial = args[1].toLowerCase(Locale.ROOT);
                 return EVENT_ACTIONS.stream()
@@ -47,6 +52,11 @@ public final class MoneyCommandTabCompleter implements TabCompleter {
         
         if (args.length == 3) {
             String sub = args[0].toLowerCase(Locale.ROOT);
+            if (sub.equals("enviar")) {
+                if ("all".startsWith(args[2].toLowerCase(Locale.ROOT))) {
+                    return List.of("all");
+                }
+            }
             String action = args[1].toLowerCase(Locale.ROOT);
             if (sub.equals("event") && action.equals("start")) {
                 // Infelizmente o TabCompleter não tem acesso ao EventManager fácil aqui sem injeção

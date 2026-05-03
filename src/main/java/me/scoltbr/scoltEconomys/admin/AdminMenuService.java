@@ -41,8 +41,9 @@ public final class AdminMenuService {
     public void openMain(Player player) {
         Inventory inv = Bukkit.createInventory(new AdminMenuHolder(AdminMenuPage.MAIN), 54,
                 "§6§lScoltEconomy §7(Admin)");
-        renderMain(inv);
+        inv.setItem(22, MenuItems.item(Material.CLOCK, "§e§lCarregando...", "§7Buscando estatísticas do banco de dados..."));
         player.openInventory(inv);
+        renderMain(inv);
     }
 
     public void openAlerts(Player player) {
@@ -64,8 +65,10 @@ public final class AdminMenuService {
             return;
 
         inv.clear();
-        if (holder.page() == AdminMenuPage.MAIN)
+        if (holder.page() == AdminMenuPage.MAIN) {
+            inv.setItem(22, MenuItems.item(Material.CLOCK, "§e§lCarregando...", "§7Atualizando dados..."));
             renderMain(inv);
+        }
         if (holder.page() == AdminMenuPage.ALERTS)
             renderAlerts(inv);
         if (holder.page() == AdminMenuPage.TAX)
@@ -73,48 +76,55 @@ public final class AdminMenuService {
     }
 
     private void renderMain(Inventory inv) {
-        EconomySnapshot snap = stats.calculateNow();
-        Optional<Double> growthOpt = stats.growth24h();
-        List<Alert> activeAlerts = alerts.activeAlerts();
+        async.runAsync(() -> {
+            EconomySnapshot snap = stats.calculateNow();
+            Optional<Double> growthOpt = stats.growth24h();
+            List<Alert> activeAlerts = alerts.activeAlerts();
 
-        // Moldura
-        MenuItems.fillBorder(inv, Material.BLACK_STAINED_GLASS_PANE, " ");
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                // Remove o item de carregamento
+                inv.clear();
 
-        // Stats card
-        inv.setItem(13, MenuItems.item(Material.EMERALD, "§a§lVisão Geral",
-                "§7Total Coins: §f" + MoneyFormat.format(snap.totalCoins()),
-                "§7Wallet: §f" + MoneyFormat.format(snap.totalWallet()),
-                "§7Banco: §f" + MoneyFormat.format(snap.totalBank()),
-                "§7Ativos: §f" + snap.activePlayers(),
-                "§7Média/ativo: §f" + MoneyFormat.format(snap.averagePerActivePlayer()),
-                "§7Top 10%: §f" + pct(snap.top10Concentration())));
+                // Moldura
+                MenuItems.fillBorder(inv, Material.BLACK_STAINED_GLASS_PANE, " ");
 
-        // Growth 24h
-        String growthLine = growthOpt
-                .map(g -> "§7Crescimento 24h: " + colorGrowth(g) + pct(g))
-                .orElse("§7Crescimento 24h: §8Sem dados (aguarde 1 dia)");
+                // Stats card
+                inv.setItem(13, MenuItems.item(Material.EMERALD, "§a§lVisão Geral",
+                        "§7Total Coins: §f" + MoneyFormat.format(snap.totalCoins()),
+                        "§7Wallet: §f" + MoneyFormat.format(snap.totalWallet()),
+                        "§7Banco: §f" + MoneyFormat.format(snap.totalBank()),
+                        "§7Ativos: §f" + snap.activePlayers(),
+                        "§7Média/ativo: §f" + MoneyFormat.format(snap.averagePerActivePlayer()),
+                        "§7Top 10%: §f" + pct(snap.top10Concentration())));
 
-        inv.setItem(22, MenuItems.item(Material.CLOCK, "§e§lCrescimento",
-                growthLine,
-                "§8Base: hoje vs ontem (tabela diária)"));
+                // Growth 24h
+                String growthLine = growthOpt
+                        .map(g -> "§7Crescimento 24h: " + colorGrowth(g) + pct(g))
+                        .orElse("§7Crescimento 24h: §8Sem dados (aguarde 1 dia)");
 
-        // Alerts summary
-        inv.setItem(31, MenuItems.item(
-                activeAlerts.isEmpty() ? Material.LIME_DYE : Material.RED_DYE,
-                "§c§lAlertas",
-                activeAlerts.isEmpty()
-                        ? "§aNenhum alerta ativo"
-                        : ("§c" + activeAlerts.size() + " alerta(s) ativo(s)"),
-                "§7Clique para abrir"));
+                inv.setItem(22, MenuItems.item(Material.CLOCK, "§e§lCrescimento",
+                        growthLine,
+                        "§8Base: hoje vs ontem (tabela diária)"));
 
-        // Buttons
-        inv.setItem(49, MenuItems.item(Material.ENDER_EYE, "§b§lAtualizar", "§7Clique para atualizar esta página"));
+                // Alerts summary
+                inv.setItem(31, MenuItems.item(
+                        activeAlerts.isEmpty() ? Material.LIME_DYE : Material.RED_DYE,
+                        "§c§lAlertas",
+                        activeAlerts.isEmpty()
+                                ? "§aNenhum alerta ativo"
+                                : ("§c" + activeAlerts.size() + " alerta(s) ativo(s)"),
+                        "§7Clique para abrir"));
 
-        inv.setItem(46, MenuItems.item(Material.PAPER, "§f§lImpostos", "§7Clique para gerenciar as taxas"));
-        inv.setItem(47, MenuItems.item(Material.GOLD_INGOT, "§6§lBanco", "§7(Em breve)"));
-        inv.setItem(48, MenuItems.item(Material.BELL, "§c§lAlertas", "§7Clique para ver detalhes"));
+                // Buttons
+                inv.setItem(49, MenuItems.item(Material.ENDER_EYE, "§b§lAtualizar", "§7Clique para atualizar esta página"));
 
-        inv.setItem(53, MenuItems.item(Material.BARRIER, "§c§lFechar", "§7Clique para fechar"));
+                inv.setItem(46, MenuItems.item(Material.PAPER, "§f§lImpostos", "§7Clique para gerenciar as taxas"));
+                inv.setItem(47, MenuItems.item(Material.GOLD_INGOT, "§6§lBanco", "§7(Em breve)"));
+                inv.setItem(48, MenuItems.item(Material.BELL, "§c§lAlertas", "§7Clique para ver detalhes"));
+
+                inv.setItem(53, MenuItems.item(Material.BARRIER, "§c§lFechar", "§7Clique para fechar"));
+            });
+        });
     }
 
     private void renderAlerts(Inventory inv) {
@@ -197,7 +207,7 @@ public final class AdminMenuService {
                 : "tax.withdraw.rate";
 
         plugin.getConfig().set(key, newRate);
-        async.runAsync(plugin::saveConfig);
+        plugin.saveConfig();
 
         p.sendMessage("§aTaxa atualizada: §f" + pct(newRate));
     }
@@ -212,7 +222,7 @@ public final class AdminMenuService {
                 : "tax.withdraw.enabled";
 
         plugin.getConfig().set(key, newEnabled);
-        async.runAsync(plugin::saveConfig);
+        plugin.saveConfig();
 
         p.sendMessage("§eTaxa " + (newEnabled ? "§aATIVADA" : "§cDESATIVADA") + "§e.");
     }
@@ -223,6 +233,10 @@ public final class AdminMenuService {
 
     private String pct(double v) {
         return String.format(Locale.US, "%.2f%%", v * 100.0);
+    }
+
+    private String pct(java.math.BigDecimal v) {
+        return pct(v.doubleValue());
     }
 
     private String colorGrowth(double g) {

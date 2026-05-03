@@ -50,7 +50,7 @@ public interface ScoltEconomyAPI {
      * @param uuid UUID do jogador.
      * @return saldo atual na carteira, ou 0.0 se não encontrado no cache.
      */
-    double getWallet(UUID uuid);
+    java.math.BigDecimal getWallet(UUID uuid);
 
     /**
      * Retorna o saldo do banco de um jogador de forma síncrona.
@@ -59,7 +59,7 @@ public interface ScoltEconomyAPI {
      * @param uuid UUID do jogador.
      * @return saldo no banco, ou 0.0 se não encontrado no cache.
      */
-    double getBank(UUID uuid);
+    java.math.BigDecimal getBank(UUID uuid);
 
     /**
      * Adiciona uma quantia à carteira do jogador de forma síncrona.
@@ -68,7 +68,7 @@ public interface ScoltEconomyAPI {
      * @param uuid   UUID do jogador.
      * @param amount Quantia positiva a depositar.
      */
-    void depositWallet(UUID uuid, double amount);
+    void depositWallet(UUID uuid, java.math.BigDecimal amount);
 
     /**
      * Retira uma quantia da carteira do jogador de forma síncrona.
@@ -77,7 +77,7 @@ public interface ScoltEconomyAPI {
      * @param amount Quantia positiva a retirar.
      * @return {@code true} se a transação foi bem-sucedida, {@code false} se saldo insuficiente ou cancelada.
      */
-    boolean withdrawWallet(UUID uuid, double amount);
+    boolean withdrawWallet(UUID uuid, java.math.BigDecimal amount);
 
     /**
      * Define o saldo da carteira do jogador exatamente para o valor especificado.
@@ -85,7 +85,7 @@ public interface ScoltEconomyAPI {
      * @param uuid  UUID do jogador.
      * @param value Novo saldo (deve ser >= 0).
      */
-    void setWallet(UUID uuid, double value);
+    void setWallet(UUID uuid, java.math.BigDecimal value);
 
     // -------------------------------------------------------
     // Carteira (assíncrono — para jogadores offline)
@@ -97,7 +97,7 @@ public interface ScoltEconomyAPI {
      * @param uuid     UUID do jogador.
      * @param callback Consumidor que receberá o valor (executado na Main Thread).
      */
-    void getWalletAsync(UUID uuid, Consumer<Double> callback);
+    void getWalletAsync(UUID uuid, Consumer<java.math.BigDecimal> callback);
 
     // -------------------------------------------------------
     // Transferência
@@ -112,7 +112,7 @@ public interface ScoltEconomyAPI {
      * @param amount   Valor bruto a ser enviado.
      * @param callback Resultado da operação contendo sucesso, valor líquido e taxas.
      */
-    void transfer(UUID from, UUID to, double amount, Consumer<TransferResult> callback);
+    void transfer(UUID from, UUID to, java.math.BigDecimal amount, Consumer<TransferResult> callback);
 
     // -------------------------------------------------------
     // Banco
@@ -125,7 +125,7 @@ public interface ScoltEconomyAPI {
      * @param amount   Quantia a depositar no banco.
      * @param callback Resultado da operação bancária.
      */
-    void depositToBank(UUID uuid, double amount, Consumer<BankResult> callback);
+    void depositToBank(UUID uuid, java.math.BigDecimal amount, Consumer<BankResult> callback);
 
     /**
      * Retira dinheiro do banco para a carteira (Wallet), aplicando taxa de saque se configurado.
@@ -134,7 +134,7 @@ public interface ScoltEconomyAPI {
      * @param amount   Quantia bruta a retirar do banco.
      * @param callback Resultado da operação contendo o valor líquido recebido na carteira.
      */
-    void withdrawFromBank(UUID uuid, double amount, Consumer<BankResult> callback);
+    void withdrawFromBank(UUID uuid, java.math.BigDecimal amount, Consumer<BankResult> callback);
 
     // -------------------------------------------------------
     // Tesouro
@@ -145,7 +145,7 @@ public interface ScoltEconomyAPI {
      *
      * @return saldo total do tesouro.
      */
-    double getTreasuryBalance();
+    java.math.BigDecimal getTreasuryBalance();
 
     // -------------------------------------------------------
     // Evento Econômico Ativo
@@ -175,7 +175,7 @@ public interface ScoltEconomyAPI {
      * @param stockId ID da empresa no config (ex: "SCOLT").
      * @return preço corrente, ou 0.0 se não existir ou módulo inativo.
      */
-    double getStockPrice(String stockId);
+    java.math.BigDecimal getStockPrice(String stockId);
 
     /**
      * Retorna a quantidade de ações ainda disponíveis para compra por jogadores.
@@ -200,24 +200,24 @@ public interface ScoltEconomyAPI {
     /**
      * Resultado padronizado para operações de transferência entre jogadores.
      */
-    record TransferResult(boolean success, double net, double fee, String reason) {
-        public static TransferResult ok(double net, double fee) {
+    record TransferResult(boolean success, java.math.BigDecimal net, java.math.BigDecimal fee, String reason) {
+        public static TransferResult ok(java.math.BigDecimal net, java.math.BigDecimal fee) {
             return new TransferResult(true, net, fee, null);
         }
         public static TransferResult fail(String reason) {
-            return new TransferResult(false, 0, 0, reason);
+            return new TransferResult(false, java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO, reason);
         }
     }
 
     /**
      * Resultado padronizado para depósitos e saques bancários.
      */
-    record BankResult(boolean success, double net, double fee, String reason) {
-        public static BankResult ok(double net, double fee) {
+    record BankResult(boolean success, java.math.BigDecimal net, java.math.BigDecimal fee, String reason) {
+        public static BankResult ok(java.math.BigDecimal net, java.math.BigDecimal fee) {
             return new BankResult(true, net, fee, null);
         }
         public static BankResult fail(String reason) {
-            return new BankResult(false, 0, 0, reason);
+            return new BankResult(false, java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO, reason);
         }
     }
 
@@ -238,18 +238,18 @@ public interface ScoltEconomyAPI {
     record StockHoldingInfo(
             String stockId,
             long quantity,
-            double avgPrice,
-            double currentPrice
+            java.math.BigDecimal avgPrice,
+            java.math.BigDecimal currentPrice
     ) {
         /** Calc o lucro/prejuízo monetário bruto da posição. */
-        public double unrealizedPnl() {
-            return (currentPrice - avgPrice) * quantity;
+        public java.math.BigDecimal unrealizedPnl() {
+            return currentPrice.subtract(avgPrice).multiply(java.math.BigDecimal.valueOf(quantity));
         }
 
         /** Calc a variação percentual em relação ao preço médio de compra. */
         public double pnlPercent() {
-            if (avgPrice <= 0) return 0;
-            return ((currentPrice - avgPrice) / avgPrice) * 100.0;
+            if (avgPrice.compareTo(java.math.BigDecimal.ZERO) <= 0) return 0;
+            return currentPrice.subtract(avgPrice).divide(avgPrice, 4, java.math.RoundingMode.HALF_UP).doubleValue() * 100.0;
         }
     }
 }

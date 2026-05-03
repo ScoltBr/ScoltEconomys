@@ -17,7 +17,7 @@ public class PayAliasCommand implements CommandExecutor {
         }
 
         String target = args[0];
-        double amount;
+        java.math.BigDecimal amount;
         try {
             amount = MoneyParser.parse(args[1]);
         } catch (Exception e) {
@@ -25,7 +25,7 @@ public class PayAliasCommand implements CommandExecutor {
             return true;
         }
 
-        Bukkit.dispatchCommand(sender, "money enviar " + target + " " + amount);
+        Bukkit.dispatchCommand(sender, "money enviar " + target + " " + amount.toPlainString());
         return true;
     }
 }

@@ -25,7 +25,7 @@ public final class PayCommand implements CommandExecutor {
         }
 
         if (args.length < 2) {
-            MessageUtils.sendError(from, "Uso: /pay <player> <amount>");
+            MessageUtils.sendError(from, "Uso: /pay \\<player\\> \\<amount\\>");
             return true;
         }
 
@@ -40,23 +40,25 @@ public final class PayCommand implements CommandExecutor {
             return true;
         }
 
-        double amount;
-        try {
-            amount = MoneyParser.parse(args[1]); // fix: era args[2]
-        } catch (Exception e) {
-            MessageUtils.sendError(from, "Valor inválido.");
-            return true;
-        }
-
-        try {
-            Preconditions.positive(amount, "amount");
-        } catch (IllegalArgumentException e) {
-            MessageUtils.sendError(from, "O valor precisa ser maior que 0.");
-            return true;
-        }
-
         // Garante que as duas contas estão carregadas antes de transferir
         accounts.getOrLoad(from.getUniqueId(), fromAcc -> {
+            java.math.BigDecimal amount;
+            if (args[1].equalsIgnoreCase("all") || args[1].equalsIgnoreCase("tudo") || args[1].equals("*")) {
+                amount = fromAcc.wallet();
+            } else {
+                try {
+                    amount = MoneyParser.parse(args[1]);
+                } catch (Exception e) {
+                    MessageUtils.sendError(from, "Valor numérico inválido.");
+                    return;
+                }
+            }
+
+            if (amount.compareTo(java.math.BigDecimal.ZERO) <= 0) {
+                MessageUtils.sendError(from, "O valor precisa ser maior que 0 e você precisa ter fundos.");
+                return;
+            }
+
             accounts.getOrLoad(to.getUniqueId(), toAcc -> {
 
                 // Usa transferWallet: respeita impostos, audit e StripedLocks (anti-deadlock)
@@ -76,7 +78,7 @@ public final class PayCommand implements CommandExecutor {
                 MessageUtils.playSuccess(from);
                 MessageUtils.actionBar(from, "<red>-$ " + formattedNet + "</red>");
 
-                if (result.fee() > 0) {
+                if (result.fee().compareTo(java.math.BigDecimal.ZERO) > 0) {
                     MessageUtils.send(from, "<gray>Imposto retido: <white>$ " + MoneyFormat.format(result.fee()) + "</white></gray>");
                 }
 

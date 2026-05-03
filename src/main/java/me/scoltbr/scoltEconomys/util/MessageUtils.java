@@ -15,16 +15,42 @@ public final class MessageUtils {
     private MessageUtils() {}
 
     public static Component format(String input) {
-        return MiniMessage.miniMessage().deserialize(PREFIX + input);
+        return MiniMessage.miniMessage().deserialize(PREFIX + translate(input));
     }
     
     public static Component formatError(String input) {
-        return MiniMessage.miniMessage().deserialize(ERROR_PREFIX + input + "</red>");
+        return MiniMessage.miniMessage().deserialize(ERROR_PREFIX + translate(input) + "</red>");
     }
 
     // Apenas parsa string bruta
     public static Component parseRaw(String input) {
-        return MiniMessage.miniMessage().deserialize(input);
+        return MiniMessage.miniMessage().deserialize(translate(input));
+    }
+
+    private static String translate(String input) {
+        if (input == null) return "";
+        return input.replace("&0", "<black>")
+                .replace("&1", "<dark_blue>")
+                .replace("&2", "<dark_green>")
+                .replace("&3", "<dark_aqua>")
+                .replace("&4", "<dark_red>")
+                .replace("&5", "<dark_purple>")
+                .replace("&6", "<gold>")
+                .replace("&7", "<gray>")
+                .replace("&8", "<dark_gray>")
+                .replace("&9", "<blue>")
+                .replace("&a", "<green>")
+                .replace("&b", "<aqua>")
+                .replace("&c", "<red>")
+                .replace("&d", "<light_purple>")
+                .replace("&e", "<yellow>")
+                .replace("&f", "<white>")
+                .replace("&k", "<obfuscated>")
+                .replace("&l", "<bold>")
+                .replace("&m", "<strikethrough>")
+                .replace("&n", "<underlined>")
+                .replace("&o", "<italic>")
+                .replace("&r", "<reset>");
     }
 
     // Enviar mensagem padronizada no plugin

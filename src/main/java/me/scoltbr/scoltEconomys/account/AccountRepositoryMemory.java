@@ -1,5 +1,7 @@
 package me.scoltbr.scoltEconomys.account;
 
+import java.math.BigDecimal;
+
 import org.bukkit.plugin.Plugin;
 
 import java.time.Instant;
@@ -33,8 +35,8 @@ public final class AccountRepositoryMemory implements AccountRepository {
     @Override
     public List<TopBalanceRow> topTotal(int limit) {
         return store.values().stream()
-                .map(acc -> new TopBalanceRow(acc.uuid(), null, acc.wallet() + acc.bank()))
-                .sorted((a, b) -> Double.compare(b.total(), a.total()))
+                .map(acc -> new TopBalanceRow(acc.uuid(), null, acc.wallet().add(acc.bank())))
+                .sorted((a, b) -> b.total().compareTo(a.total()))
                 .limit(limit)
                 .toList();
     }
@@ -45,34 +47,32 @@ public final class AccountRepositoryMemory implements AccountRepository {
     }
 
     @Override
-    public java.util.OptionalDouble getWalletBalanceSync(UUID uuid) {
-        if (!store.containsKey(uuid)) return java.util.OptionalDouble.empty();
-        return java.util.OptionalDouble.of(store.get(uuid).wallet());
+    public Optional<BigDecimal> getWalletBalanceSync(UUID uuid) {
+        if (!store.containsKey(uuid)) return Optional.empty();
+        return Optional.of(store.get(uuid).wallet());
     }
 
     @Override
-    public boolean addWalletBalanceSync(UUID uuid, double amount) {
+    public boolean addWalletBalanceSync(UUID uuid, BigDecimal amount) {
         if (!store.containsKey(uuid)) return false;
-        double current = store.get(uuid).wallet();
-        if (current + amount < 0) return false;
-        store.get(uuid).setWallet(current + amount);
+        BigDecimal current = store.get(uuid).wallet();
+        if (current.add(amount).compareTo(BigDecimal.ZERO) < 0) return false;
+        store.get(uuid).setWallet(current.add(amount));
         return true;
     }
 
     @Override
     public GlobalEconomyData getGlobalEconomyData() {
-        double w = store.values().stream().mapToDouble(PlayerAccount::wallet).sum();
-        double b = store.values().stream().mapToDouble(PlayerAccount::bank).sum();
+        BigDecimal w = store.values().stream().map(PlayerAccount::wallet).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal b = store.values().stream().map(PlayerAccount::bank).reduce(BigDecimal.ZERO, BigDecimal::add);
         int c = store.size();
         
         int topCount = Math.max(1, c / 10);
-        double t10 = store.values().stream()
-                .mapToDouble(acc -> acc.wallet() + acc.bank())
-                .boxed()
+        BigDecimal t10 = store.values().stream()
+                .map(acc -> acc.wallet().add(acc.bank()))
                 .sorted(Comparator.reverseOrder())
                 .limit(topCount)
-                .mapToDouble(Double::doubleValue)
-                .sum();
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
                 
         return new GlobalEconomyData(w, b, c, t10);
     }

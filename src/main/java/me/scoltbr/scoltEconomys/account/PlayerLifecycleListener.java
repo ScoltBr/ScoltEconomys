@@ -26,22 +26,25 @@ public final class PlayerLifecycleListener implements Listener {
     @EventHandler
     public void onPreLogin(AsyncPlayerPreLoginEvent e) {
         java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+        String playerName = e.getName();
+
         accountService.getOrLoad(e.getUniqueId(), acc -> {
+            // Atualiza o nome DEPOIS que a conta foi carregada/criada — garante que o
+            // UPDATE não falha silenciosamente por não encontrar a linha no banco.
+            if (playerName != null && !playerName.isBlank()) {
+                async.runAsync(() -> accountRepository.updatePlayerName(e.getUniqueId(), playerName));
+            }
             latch.countDown();
         });
+
         try {
             if (!latch.await(3, java.util.concurrent.TimeUnit.SECONDS)) {
-                e.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, "§cErro ao carregar dados financeiros. Tente novamente.");
+                e.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
+                        "§cErro ao carregar dados financeiros. Tente novamente.");
             }
         } catch (InterruptedException ex) {
             e.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, "§cErro interno. Tente novamente.");
             Thread.currentThread().interrupt();
-        }
-
-        // Salva o nome do jogador para o ranking funcionar corretamente
-        String name = e.getName();
-        if (name != null && !name.isBlank()) {
-            async.runAsync(() -> accountRepository.updatePlayerName(e.getUniqueId(), name));
         }
     }
 

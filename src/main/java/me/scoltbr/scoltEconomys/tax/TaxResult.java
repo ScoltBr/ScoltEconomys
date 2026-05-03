@@ -1,8 +1,10 @@
 package me.scoltbr.scoltEconomys.tax;
 
-public record TaxResult(double netAmount, double feeAmount) {
+import java.math.BigDecimal;
+
+public record TaxResult(BigDecimal netAmount, BigDecimal feeAmount) {
     public TaxResult {
-        if (netAmount < 0) throw new IllegalArgumentException("netAmount must be >= 0");
-        if (feeAmount < 0) throw new IllegalArgumentException("feeAmount must be >= 0");
+        if (netAmount.compareTo(BigDecimal.ZERO) < 0) throw new IllegalArgumentException("netAmount must be >= 0");
+        if (feeAmount.compareTo(BigDecimal.ZERO) < 0) throw new IllegalArgumentException("feeAmount must be >= 0");
     }
 }

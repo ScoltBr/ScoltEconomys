@@ -17,12 +17,12 @@ public final class StockTransactionEvent extends ScoltEconomyEvent {
     private final String stockId;
     private final TransactionType type;
     private final long quantity;
-    private final double pricePerShare;
-    private final double totalValue;
-    private final double fee;
+    private final java.math.BigDecimal pricePerShare;
+    private final java.math.BigDecimal totalValue;
+    private final java.math.BigDecimal fee;
 
     public StockTransactionEvent(UUID uuid, String stockId, TransactionType type,
-                                 long quantity, double pricePerShare, double totalValue, double fee) {
+                                 long quantity, java.math.BigDecimal pricePerShare, java.math.BigDecimal totalValue, java.math.BigDecimal fee) {
         this.uuid = uuid;
         this.stockId = stockId;
         this.type = type;
@@ -45,11 +45,11 @@ public final class StockTransactionEvent extends ScoltEconomyEvent {
     public long getQuantity() { return quantity; }
 
     /** @return preço unitário da ação no momento da execução. */
-    public double getPricePerShare() { return pricePerShare; }
+    public java.math.BigDecimal getPricePerShare() { return pricePerShare; }
 
     /** @return valor total da operação (incluindo ou excluindo taxas conforme o tipo). */
-    public double getTotalValue() { return totalValue; }
+    public java.math.BigDecimal getTotalValue() { return totalValue; }
 
     /** @return taxa de corretagem retida pelo Tesouro. */
-    public double getFee() { return fee; }
+    public java.math.BigDecimal getFee() { return fee; }
 }

@@ -32,11 +32,11 @@ public final class EconomyDailyRepositorySql implements EconomyDailyRepository {
              PreparedStatement ps = c.prepareStatement(sql)) {
 
             ps.setDate(1, Date.valueOf(day));
-            ps.setDouble(2, s.totalCoins());
-            ps.setDouble(3, s.totalWallet());
-            ps.setDouble(4, s.totalBank());
+            ps.setBigDecimal(2, s.totalCoins());
+            ps.setBigDecimal(3, s.totalWallet());
+            ps.setBigDecimal(4, s.totalBank());
             ps.setInt(5, s.activePlayers());
-            ps.setDouble(6, s.top10Concentration());
+            ps.setBigDecimal(6, s.top10Concentration());
             ps.setLong(7, s.at().toEpochMilli());
 
             ps.executeUpdate();
@@ -63,11 +63,11 @@ public final class EconomyDailyRepositorySql implements EconomyDailyRepository {
 
                 return Optional.of(new EconomyDailyRow(
                         rs.getDate("day").toLocalDate(),
-                        rs.getDouble("total_coins"),
-                        rs.getDouble("total_wallet"),
-                        rs.getDouble("total_bank"),
+                        rs.getBigDecimal("total_coins"),
+                        rs.getBigDecimal("total_wallet"),
+                        rs.getBigDecimal("total_bank"),
                         rs.getInt("active_players"),
-                        rs.getDouble("top_concentration"),
+                        rs.getBigDecimal("top_concentration"),
                         rs.getLong("updated_at")
                 ));
             }

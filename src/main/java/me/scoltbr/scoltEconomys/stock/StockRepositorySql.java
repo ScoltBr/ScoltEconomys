@@ -3,6 +3,7 @@ package me.scoltbr.scoltEconomys.stock;
 import javax.sql.DataSource;
 import java.sql.*;
 import java.util.*;
+import java.math.BigDecimal;
 
 public final class StockRepositorySql implements StockRepository {
 
@@ -21,7 +22,7 @@ public final class StockRepositorySql implements StockRepository {
         exec("INSERT INTO se_stock_prices (stock_id, price, recorded_at) VALUES (?,?,?)",
                 ps -> {
                     ps.setString(1, p.stockId());
-                    ps.setDouble(2, p.price());
+                    ps.setBigDecimal(2, p.price());
                     ps.setLong(3, p.recordedAt());
                 });
     }
@@ -39,7 +40,7 @@ public final class StockRepositorySql implements StockRepository {
                 while (rs.next()) {
                     result.add(new StockPrice(
                             rs.getString("stock_id"),
-                            rs.getDouble("price"),
+                            rs.getBigDecimal("price"),
                             rs.getLong("recorded_at")));
                 }
             }
@@ -95,7 +96,7 @@ public final class StockRepositorySql implements StockRepository {
                     ps.setString(1, h.uuid().toString());
                     ps.setString(2, h.stockId());
                     ps.setLong(3, h.quantity());
-                    ps.setDouble(4, h.avgPrice());
+                    ps.setBigDecimal(4, h.avgPrice());
                 });
     }
 
@@ -113,7 +114,7 @@ public final class StockRepositorySql implements StockRepository {
     // -------------------------------------------------------
 
     @Override
-    public void recordTransaction(UUID uuid, String stockId, String type, long qty, double price, double total) {
+    public void recordTransaction(UUID uuid, String stockId, String type, long qty, java.math.BigDecimal price, java.math.BigDecimal total) {
         exec("INSERT INTO se_stock_transactions (uuid, stock_id, type, quantity, price, total, executed_at) " +
                 "VALUES (?,?,?,?,?,?,?)",
                 ps -> {
@@ -121,8 +122,8 @@ public final class StockRepositorySql implements StockRepository {
                     ps.setString(2, stockId);
                     ps.setString(3, type);
                     ps.setLong(4, qty);
-                    ps.setDouble(5, price);
-                    ps.setDouble(6, total);
+                    ps.setBigDecimal(5, price);
+                    ps.setBigDecimal(6, total);
                     ps.setLong(7, System.currentTimeMillis());
                 });
     }
@@ -193,7 +194,7 @@ public final class StockRepositorySql implements StockRepository {
                 UUID.fromString(rs.getString("uuid")),
                 rs.getString("stock_id"),
                 rs.getLong("quantity"),
-                rs.getDouble("avg_price"));
+                rs.getBigDecimal("avg_price"));
     }
 
     @FunctionalInterface

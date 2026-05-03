@@ -6,11 +6,13 @@ import me.scoltbr.scoltEconomys.util.MoneyFormat;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
+import org.bukkit.NamespacedKey;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
 
 import java.time.Instant;
@@ -33,23 +35,30 @@ public final class StockMenuService {
     private static final DateTimeFormatter TIME_FMT =
             DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault());
 
+    private static final NamespacedKey STOCK_ID_KEY =
+            new NamespacedKey("scolteconomys", "stock_id");
+    private static final NamespacedKey STOCK_ACTION_KEY =
+            new NamespacedKey("scolteconomys", "stock_action");
+
     private final Plugin plugin;
     private final StockMarketService stockService;
+    private final me.scoltbr.scoltEconomys.account.AccountService accountService;
 
-    // Materiais por setor
+    // Materiais por setor (mais "premium")
     private static final Map<String, Material> SECTOR_ICONS = Map.of(
-            "bancario",      Material.GOLD_INGOT,
-            "comercio",      Material.EMERALD,
-            "mineracao",     Material.IRON_PICKAXE,
-            "farmaceutico",  Material.HONEY_BOTTLE,
-            "tecnologia",    Material.COMPARATOR,
-            "agro",          Material.WHEAT,
-            "energia",       Material.BLAZE_POWDER
+            "bancario",      Material.GOLD_BLOCK,
+            "comercio",      Material.EMERALD_BLOCK,
+            "mineracao",     Material.NETHERITE_PICKAXE,
+            "farmaceutico",  Material.BREWING_STAND,
+            "tecnologia",    Material.NETHER_STAR,
+            "agro",          Material.HAY_BLOCK,
+            "energia",       Material.BEACON
     );
 
-    public StockMenuService(Plugin plugin, StockMarketService stockService) {
+    public StockMenuService(Plugin plugin, StockMarketService stockService, me.scoltbr.scoltEconomys.account.AccountService accountService) {
         this.plugin = plugin;
         this.stockService = stockService;
+        this.accountService = accountService;
     }
 
     // -------------------------------------------------------
@@ -59,34 +68,41 @@ public final class StockMenuService {
     /** Abre o menu principal da bolsa (dados em memória — sem IO). */
     public void openMarket(Player player) {
         Map<String, Stock> stocks = stockService.getStocks();
-        int rows = Math.max(2, (int) Math.ceil(stocks.size() / 9.0) + 1);
-        rows = Math.min(rows, 4);
+        int rows = Math.min(6, Math.max(3, (int) Math.ceil(stocks.size() / 7.0) + 2));
 
         Inventory inv = Bukkit.createInventory(
                 new StockMenuHolder(StockMenuHolder.MenuType.MARKET, null),
                 rows * 9,
-                MM.deserialize("<gradient:#ffd700:#ff8c00><b>📈 Bolsa de Valores</b></gradient>")
+                MM.deserialize("<gradient:#ffd700:#ff8c00><b><underlined>📈 BOLA DE VALORES</underlined></b></gradient>")
         );
 
-        // Fundo decorativo
-        ItemStack border = buildBorder();
-        for (int i = (rows - 1) * 9; i < rows * 9; i++) inv.setItem(i, border);
+        // Bordas laterais e fundo fundo informativo
+        fillBorders(inv, rows);
 
-        // Empresas — uma por slot
-        int slot = 0;
-        for (Stock stock : stocks.values()) {
-            if (slot >= (rows - 1) * 9) break;
-            inv.setItem(slot++, buildCompanyOverviewItem(stock));
-        }
+        // Carrega holdings para mostrar P&L no menu principal
+        stockService.getPortfolioAsync(player.getUniqueId(), holdings -> {
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                int slot = 10; // Começa no slot 10 (segunda linha, segunda coluna)
+                for (Stock stock : stocks.values()) {
+                    if (slot % 9 == 8) slot += 2; // Pula as bordas
+                    if (slot >= (rows - 1) * 9) break;
 
-        // Botão "Meu Portfólio" no canto inferior esquerdo
-        inv.setItem((rows - 1) * 9, buildNavItem(Material.CHEST, "<green><b>Meu Portfólio</b></green>",
-                List.of("<gray>Clique para ver suas ações e P&L")));
+                    StockHolding h = holdings.get(stock.id());
+                    inv.setItem(slot++, buildCompanyOverviewItem(stock, h));
+                }
 
-        // Fechar no canto inferior direito
-        inv.setItem(rows * 9 - 1, buildNavItem(Material.BARRIER, "<red>Fechar</red>", List.of()));
+                // Botão "Meu Portfólio" centralizado embaixo
+                inv.setItem(rows * 9 - 5, buildNavItem(Material.CHEST, "<gradient:#9b59b6:#3498db><b>💼 Minha Carteira</b></gradient>",
+                        List.of("<gray>Veja o detalhamento dos seus investimentos", "<gray>e performance consolidada.", "", "<white>➲ Clique para abrir")));
 
-        player.openInventory(inv);
+                // Fechar (canto inferior direito) e Info (canto inferior esquerdo)
+                inv.setItem(rows * 9 - 1, buildNavItem(Material.BARRIER, "<red><b>Fechar</b></red>", List.of()));
+                inv.setItem(rows * 9 - 9, buildNavItem(Material.BOOK, "<yellow><b>Informações</b></yellow>",
+                        List.of("<gray>O mercado oscila a cada hora.", "<gray>Fique atento aos eventos econômicos!", "", "<gray>Corretagem padrão: <white>1%")));
+
+                player.openInventory(inv);
+            });
+        });
     }
 
     // -------------------------------------------------------
@@ -107,47 +123,53 @@ public final class StockMenuService {
 
             Inventory inv = Bukkit.createInventory(
                     new StockMenuHolder(StockMenuHolder.MenuType.COMPANY_DETAIL, stockId),
-                    36,
-                    MM.deserialize("<gradient:#00ffa1:#0099ff><b>📊 " + stripMM(stock.displayName()) + "</b></gradient>")
+                    45, // Aumentado para 5 linhas
+                    MM.deserialize("<gradient:#00ffa1:#0099ff><b>📊 " + stripMM(stock.displayName()).toUpperCase() + "</b></gradient>")
             );
 
-            // Linha 0: bordas + info da empresa (slot 4)
-            fillRow(inv, 0, buildBorder());
+            // Moldura Premium
+            fillBorders(inv, 5);
+
+            // Slot 4: Info da empresa
             inv.setItem(4, buildCompanyDetailHeader(stock));
 
-            // Linha 1: gráfico de preços (9 slots)
-            buildPriceChart(inv, 9, history, stockService.currentPrice(stockId));
+            // Slot 13: Saldo do Jogador
+            inv.setItem(13, buildUserBalanceItem(player));
 
-            // Linha 2: separador + info de posição (slot 18)
-            fillRow(inv, 2, buildBorder());
+            // Linha 2 (Slots 18-26): Gráfico de preços
+            buildPriceChart(inv, 19, history, stockService.currentPrice(stockId));
+
             stockService.getPortfolioAsync(player.getUniqueId(), holdings -> {
                 long myQty = 0;
-                double myAvg = 0;
+                java.math.BigDecimal myAvg = java.math.BigDecimal.ZERO;
                 StockHolding h = holdings.get(stockId);
                 if (h != null) { myQty = h.quantity(); myAvg = h.avgPrice(); }
 
-                // Slot 22 = info da posição atual
                 final long finalQty = myQty;
-                final double finalAvg = myAvg;
+                final java.math.BigDecimal finalAvg = myAvg;
                 Bukkit.getScheduler().runTask(plugin, () -> {
-                    inv.setItem(22, buildHoldingInfoItem(stock, finalQty, finalAvg));
+                    // Slot 31 = info da posição atual
+                    inv.setItem(31, buildHoldingInfoItem(stock, finalQty, finalAvg));
 
-                    // Linha 3: botões de compra/venda
+                    java.math.BigDecimal walletBalance = accountService.getWalletSync(player.getUniqueId());
+
+                    // Botões de compra (Verde)
                     long avail = stockService.availableShares(stockId);
-                    inv.setItem(27, buildActionButton(Material.LIME_STAINED_GLASS_PANE, "<green><b>Comprar 1</b></green>",  stockId, 1,    avail, "BUY"));
-                    inv.setItem(28, buildActionButton(Material.LIME_STAINED_GLASS_PANE, "<green><b>Comprar 10</b></green>", stockId, 10,   avail, "BUY"));
-                    inv.setItem(29, buildActionButton(Material.LIME_STAINED_GLASS_PANE, "<green><b>Comprar 100</b></green>",stockId, 100,  avail, "BUY"));
-                    inv.setItem(30, buildActionButton(Material.LIME_BLOCK,              "<green><b>Comprar Máx</b></green>",stockId, -1,   avail, "BUY_MAX"));
+                    inv.setItem(27, buildActionButton(Material.LIME_STAINED_GLASS_PANE, "<green><b>Comprar 1</b></green>",  stockId, 1,    avail, "BUY", walletBalance));
+                    inv.setItem(28, buildActionButton(Material.LIME_STAINED_GLASS_PANE, "<green><b>Comprar 10</b></green>", stockId, 10,   avail, "BUY", walletBalance));
+                    inv.setItem(29, buildActionButton(Material.LIME_STAINED_GLASS_PANE, "<green><b>Comprar 100</b></green>",stockId, 100,  avail, "BUY", walletBalance));
+                    inv.setItem(30, buildActionButton(Material.LIME_STAINED_GLASS,              "<green><b>Comprar Máximo</b></green>",stockId, -1,   avail, "BUY_MAX", walletBalance));
 
+                    // Botões de venda (Vermelho)
                     long myHeld = finalQty;
-                    inv.setItem(32, buildActionButton(Material.RED_STAINED_GLASS_PANE, "<red><b>Vender 1</b></red>",   stockId, 1,   myHeld, "SELL"));
-                    inv.setItem(33, buildActionButton(Material.RED_STAINED_GLASS_PANE, "<red><b>Vender 10</b></red>",  stockId, 10,  myHeld, "SELL"));
-                    inv.setItem(34, buildActionButton(Material.RED_STAINED_GLASS_PANE, "<red><b>Vender 100</b></red>", stockId, 100, myHeld, "SELL"));
-                    inv.setItem(35, buildActionButton(Material.RED_BLOCK,              "<red><b>Vender Tudo</b></red>", stockId, -1,  myHeld, "SELL_ALL"));
+                    inv.setItem(32, buildActionButton(Material.RED_STAINED_GLASS_PANE, "<red><b>Vender 1</b></red>",   stockId, 1,   myHeld, "SELL", walletBalance));
+                    inv.setItem(33, buildActionButton(Material.RED_STAINED_GLASS_PANE, "<red><b>Vender 10</b></red>",  stockId, 10,  myHeld, "SELL", walletBalance));
+                    inv.setItem(34, buildActionButton(Material.RED_STAINED_GLASS_PANE, "<red><b>Vender 100</b></red>", stockId, 100, myHeld, "SELL", walletBalance));
+                    inv.setItem(35, buildActionButton(Material.RED_STAINED_GLASS,              "<red><b>Vender Tudo</b></red>", stockId, -1,  myHeld, "SELL_ALL", walletBalance));
 
-                    // Botão de voltar (slot 31) e top holders (slot 26)
-                    inv.setItem(31, buildNavItem(Material.ARROW, "<yellow>Voltar</yellow>", List.of("<gray>Retorna à bolsa")));
-                    inv.setItem(26, buildNavItem(Material.PLAYER_HEAD, "<gold>Top Acionistas</gold>", List.of("<gray>Ver maiores investidores")));
+                    // Navegação e Top
+                    inv.setItem(40, buildNavItem(Material.ARROW, "<yellow><b>Voltar para a Bolsa</b></yellow>", List.of("<gray>Retorna ao mercado global")));
+                    inv.setItem(22, buildNavItem(Material.PLAYER_HEAD, "<gold><b>Maiores Acionistas</b></gold>", List.of("<gray>Ver ranking de investidores", "<gray>desta empresa.")));
                 });
             });
 
@@ -161,32 +183,33 @@ public final class StockMenuService {
 
     public void openPortfolio(Player player) {
         stockService.getPortfolioAsync(player.getUniqueId(), holdings -> {
-            int rows = Math.max(2, (int) Math.ceil(holdings.size() / 9.0) + 1);
-            rows = Math.min(rows, 5);
+            int rows = Math.min(6, Math.max(4, (int) Math.ceil(holdings.size() / 7.0) + 2));
 
             Inventory inv = Bukkit.createInventory(
                     new StockMenuHolder(StockMenuHolder.MenuType.PORTFOLIO, null),
                     rows * 9,
-                    MM.deserialize("<gradient:#9b59b6:#3498db><b>💼 Meu Portfólio</b></gradient>")
+                    MM.deserialize("<gradient:#9b59b6:#3498db><b>💼 MINHA CARTEIRA</b></gradient>")
             );
 
-            // Fundo última linha
-            fillRow(inv, rows - 1, buildBorder());
+            fillBorders(inv, rows);
+
+            // Resumo da Carteira (Slot 4)
+            inv.setItem(4, buildPortfolioSummaryItem(holdings));
 
             if (holdings.isEmpty()) {
-                inv.setItem(4 + (rows / 2) * 9,
-                        buildNavItem(Material.PAPER, "<gray>Nenhuma ação em carteira</gray>",
-                                List.of("<gray>Use /bolsa para comprar ações")));
+                inv.setItem(22, buildNavItem(Material.PAPER, "<gray>Você ainda não possui investimentos</gray>",
+                                List.of("<gray>Acesse o mercado global para", "<gray>começar a investir.", "", "<white>➲ Clique em Voltar")));
             } else {
-                int slot = 0;
+                int slot = 10;
                 for (StockHolding holding : holdings.values()) {
+                    if (slot % 9 == 8) slot += 2;
                     if (slot >= (rows - 1) * 9) break;
                     inv.setItem(slot++, buildPortfolioItem(holding));
                 }
             }
 
-            inv.setItem((rows - 1) * 9,
-                    buildNavItem(Material.ARROW, "<yellow>Voltar</yellow>", List.of("<gray>Retorna à bolsa")));
+            inv.setItem(rows * 9 - 5,
+                    buildNavItem(Material.ARROW, "<yellow><b>Voltar para a Bolsa</b></yellow>", List.of("<gray>Retorna ao mercado global")));
 
             player.openInventory(inv);
         });
@@ -236,99 +259,106 @@ public final class StockMenuService {
     // Construtores de itens
     // -------------------------------------------------------
 
-    private ItemStack buildCompanyOverviewItem(Stock s) {
-        double price = stockService.currentPrice(s.id());
+    private ItemStack buildCompanyOverviewItem(Stock s, StockHolding h) {
+        java.math.BigDecimal price = stockService.currentPrice(s.id());
         long available = stockService.availableShares(s.id());
         double usedPct = (1.0 - (double) available / s.totalShares()) * 100.0;
 
+        List<String> lore = new ArrayList<>();
+        lore.add("<gray>Setor: <white>" + s.sector().substring(0, 1).toUpperCase() + s.sector().substring(1));
+        lore.add("<gray>Preço: <green>$" + MoneyFormat.format(price));
+        lore.add("<gray>Oferta: <yellow>" + available + " <dark_gray>(" + String.format("%.1f", 100 - usedPct) + "% livre)");
+
+        if (h != null && h.quantity() > 0) {
+            java.math.BigDecimal curVal = price.multiply(java.math.BigDecimal.valueOf(h.quantity()));
+            java.math.BigDecimal pnl = price.subtract(h.avgPrice()).multiply(java.math.BigDecimal.valueOf(h.quantity()));
+            String pnlColor = pnl.compareTo(java.math.BigDecimal.ZERO) >= 0 ? "<green>" : "<red>";
+            lore.add("");
+            lore.add("<gold>Sua Posição:");
+            lore.add(" <gray>• Quantidade: <white>" + h.quantity());
+            lore.add(" <gray>• P&L: " + pnlColor + "$" + MoneyFormat.format(pnl));
+        }
+
+        lore.add("");
+        lore.add("<aqua>➞ Clique para negociar");
+
         Material mat = SECTOR_ICONS.getOrDefault(s.sector(), Material.PAPER);
-        return buildSimpleItem(mat, s.displayName(), List.of(
-                "<gray>Setor: <white>" + s.sector(),
-                "<gray>Preço atual: <green>$" + MoneyFormat.format(price),
-                "<gray>Disponíveis: <yellow>" + available + " <dark_gray>(" + String.format("%.1f", 100 - usedPct) + "% livre)",
-                "",
-                "<aqua>Clique para mais detalhes"
-        ));
+        ItemStack item = buildSimpleItem(mat, "<gradient:#ffffff:#bbbbbb><b>" + s.displayName() + "</b></gradient>", lore);
+
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.getPersistentDataContainer().set(STOCK_ID_KEY, PersistentDataType.STRING, s.id());
+            item.setItemMeta(meta);
+        }
+        return item;
     }
 
     private ItemStack buildCompanyDetailHeader(Stock s) {
-        double price = stockService.currentPrice(s.id());
+        java.math.BigDecimal price = stockService.currentPrice(s.id());
         long available = stockService.availableShares(s.id());
         Material mat = SECTOR_ICONS.getOrDefault(s.sector(), Material.PAPER);
-        return buildSimpleItem(mat, s.displayName(), List.of(
+        return buildSimpleItem(mat, "<gradient:#ffff55:#ffd700><b>" + stripMM(s.displayName()).toUpperCase() + "</b></gradient>", List.of(
                 "<gray>Setor: <white>" + s.sector(),
                 "<gray>Preço atual: <green>$" + MoneyFormat.format(price),
                 "<gray>Oferta total: <yellow>" + s.totalShares(),
                 "<gray>Disponíveis: <yellow>" + available,
-                "<gray>Corretagem: <white>" + String.format("%.1f%%", s.brokerageFee() * 100)
+                "<gray>Corretagem: <white>" + String.format("%.1f%%", s.brokerageFee().doubleValue() * 100),
+                "",
+                "<gray><i>Valores atualizados em tempo real</i>"
         ));
     }
 
-    private void buildPriceChart(Inventory inv, int startSlot, List<StockPrice> history, double currentPrice) {
-        // Preenche com cinza (sem dados) e vai substituindo
-        for (int i = 0; i < 9; i++) inv.setItem(startSlot + i, buildChartPane(Material.GRAY_STAINED_GLASS_PANE, "<dark_gray>Sem dados", List.of()));
+    private void buildPriceChart(Inventory inv, int startSlot, List<StockPrice> history, java.math.BigDecimal currentPrice) {
+        for (int i = 0; i < 7; i++) inv.setItem(startSlot + i, buildChartPane(Material.GRAY_STAINED_GLASS_PANE, "<dark_gray>Processando dados...", List.of()));
 
         if (history.isEmpty()) return;
 
-        // Mostramos os últimos 9 pontos do histórico
-        List<StockPrice> view = history.size() > 9 ? history.subList(history.size() - 9, history.size()) : new ArrayList<>(history);
-
-        // Adiciona ponto atual
+        List<StockPrice> view = history.size() > 6 ? history.subList(history.size() - 6, history.size()) : new ArrayList<>(history);
         view.add(new StockPrice("now", currentPrice, System.currentTimeMillis()));
-        if (view.size() > 9) view = view.subList(view.size() - 9, view.size());
-
-        double basePrice = view.get(0).price();
 
         for (int i = 0; i < view.size(); i++) {
+            if (i >= 7) break;
             StockPrice point = view.get(i);
-            double prev = i == 0 ? point.price() : view.get(i - 1).price();
-            double change = point.price() - prev;
-            double changePct = prev > 0 ? (change / prev) * 100.0 : 0;
+            java.math.BigDecimal prev = i == 0 ? point.price() : view.get(i - 1).price();
+            java.math.BigDecimal change = point.price().subtract(prev);
+            double changePct = prev.compareTo(java.math.BigDecimal.ZERO) > 0
+                    ? change.divide(prev, 4, java.math.RoundingMode.HALF_UP).doubleValue() * 100.0 : 0;
 
             Material mat;
             String color;
-            String arrow;
             if (i == 0 || Math.abs(changePct) < 0.001) {
-                mat = Material.YELLOW_STAINED_GLASS_PANE;
-                color = "<yellow>"; arrow = "─";
-            } else if (change > 0) {
-                mat = Material.LIME_STAINED_GLASS_PANE;
-                color = "<green>"; arrow = "▲";
+                mat = Material.YELLOW_STAINED_GLASS_PANE; color = "<yellow>";
+            } else if (change.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                mat = Material.LIME_STAINED_GLASS_PANE; color = "<green>";
             } else {
-                mat = Material.RED_STAINED_GLASS_PANE;
-                color = "<red>"; arrow = "▼";
+                mat = Material.RED_STAINED_GLASS_PANE; color = "<red>";
             }
 
-            String timeLabel = i < view.size() - 1
-                    ? TIME_FMT.format(Instant.ofEpochMilli(point.recordedAt()))
-                    : "Agora";
-
-            String changeLine = i == 0
-                    ? "<gray>Ponto inicial"
-                    : color + arrow + " " + String.format("%+.2f%%", changePct);
+            String timeLabel = i < view.size() - 1 ? TIME_FMT.format(Instant.ofEpochMilli(point.recordedAt())) : "AGORA";
+            String changeLine = i == 0 ? "<gray>Referência" : color + "Variação: " + String.format("%+.2f%%", changePct);
 
             inv.setItem(startSlot + i, buildChartPane(mat,
-                    color + "<b>" + arrow + " $" + MoneyFormat.format(point.price()) + "</b>",
-                    List.of("<gray>" + timeLabel, changeLine)
-            ));
+                    color + "<b>$" + MoneyFormat.format(point.price()) + "</b>",
+                    List.of("<gray>Horário: <white>" + timeLabel, changeLine)));
         }
     }
 
-    private ItemStack buildHoldingInfoItem(Stock s, long qty, double avgPrice) {
-        double cur = stockService.currentPrice(s.id());
+    private ItemStack buildHoldingInfoItem(Stock s, long qty, java.math.BigDecimal avgPrice) {
+        java.math.BigDecimal cur = stockService.currentPrice(s.id());
         if (qty == 0) {
             return buildSimpleItem(Material.PAPER, "<gray>Você não possui ações desta empresa", List.of(
                     "<gray>Use os botões abaixo para comprar"
             ));
         }
-        double pnl    = (cur - avgPrice) * qty;
-        double pnlPct = avgPrice > 0 ? ((cur - avgPrice) / avgPrice) * 100.0 : 0;
-        String pnlColor = pnl >= 0 ? "<green>" : "<red>";
+        java.math.BigDecimal pnl = cur.subtract(avgPrice).multiply(java.math.BigDecimal.valueOf(qty));
+        double pnlPct = avgPrice.compareTo(java.math.BigDecimal.ZERO) > 0
+                ? cur.subtract(avgPrice).divide(avgPrice, 4, java.math.RoundingMode.HALF_UP).doubleValue() * 100.0 : 0;
+        String pnlColor = pnl.compareTo(java.math.BigDecimal.ZERO) >= 0 ? "<green>" : "<red>";
 
         return buildSimpleItem(Material.GOLD_NUGGET, "<yellow><b>Sua Posição</b></yellow>", List.of(
                 "<gray>Ações: <white>" + qty,
                 "<gray>Preço médio: <yellow>$" + MoneyFormat.format(avgPrice),
-                "<gray>Valor atual: <white>$" + MoneyFormat.format(cur * qty),
+                "<gray>Valor atual: <white>$" + MoneyFormat.format(cur.multiply(java.math.BigDecimal.valueOf(qty))),
                 "<gray>P&L: " + pnlColor + "$" + MoneyFormat.format(pnl) +
                         " (" + String.format("%+.2f%%", pnlPct) + ")"
         ));
@@ -338,63 +368,116 @@ public final class StockMenuService {
         Stock s = stockService.getStock(h.stockId()).orElse(null);
         if (s == null) return buildSimpleItem(Material.PAPER, "<gray>" + h.stockId(), List.of());
 
-        double cur    = stockService.currentPrice(s.id());
-        double pnl    = h.unrealizedPnl(cur);
+        java.math.BigDecimal cur = stockService.currentPrice(s.id());
+        java.math.BigDecimal pnl = h.unrealizedPnl(cur);
         double pnlPct = h.pnlPercent(cur);
-        String pnlColor = pnl >= 0 ? "<green>" : "<red>";
+        String pnlColor = pnl.compareTo(java.math.BigDecimal.ZERO) >= 0 ? "<green>" : "<red>";
         Material mat = SECTOR_ICONS.getOrDefault(s.sector(), Material.PAPER);
 
-        return buildSimpleItem(mat, s.displayName(), List.of(
+        ItemStack item = buildSimpleItem(mat, s.displayName(), List.of(
                 "<gray>Ações: <white>" + h.quantity(),
                 "<gray>Preço médio: <yellow>$" + MoneyFormat.format(h.avgPrice()),
                 "<gray>Preço atual: <white>$" + MoneyFormat.format(cur),
-                "<gray>Valor total: <white>$" + MoneyFormat.format(cur * h.quantity()),
+                "<gray>Valor total: <white>$" + MoneyFormat.format(cur.multiply(java.math.BigDecimal.valueOf(h.quantity()))),
                 "<gray>P&L: " + pnlColor + "$" + MoneyFormat.format(pnl) +
                         " (" + String.format("%+.2f%%", pnlPct) + ")",
                 "",
                 "<aqua>Clique para abrir a empresa"
         ));
+
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.getPersistentDataContainer().set(STOCK_ID_KEY, PersistentDataType.STRING, s.id());
+            item.setItemMeta(meta);
+        }
+        return item;
     }
 
-    private ItemStack buildActionButton(Material mat, String name, String stockId, long qty, long available, String action) {
-        double price = stockService.currentPrice(stockId);
-        long effectiveQty = qty < 0 ? available : qty;   // -1 = máx
+    private ItemStack buildActionButton(Material mat, String name, String stockId, long qty, long available, String action, java.math.BigDecimal walletBalance) {
+        java.math.BigDecimal price = stockService.currentPrice(stockId);
+        Stock s = stockService.getStocks().get(stockId);
 
-        boolean canAfford = effectiveQty > 0 && effectiveQty <= available;
+        long effectiveQty = qty;
+        if (action.equals("BUY_MAX") && s != null) {
+            java.math.BigDecimal priceWithFee = price.multiply(java.math.BigDecimal.ONE.add(s.brokerageFee()));
+            if (priceWithFee.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                long maxAffordable = walletBalance.divide(priceWithFee, 0, java.math.RoundingMode.DOWN).longValue();
+                effectiveQty = Math.min(maxAffordable, available);
+            } else {
+                effectiveQty = available;
+            }
+        } else if (qty < 0) {
+            effectiveQty = available;
+        }
+
+        boolean canAfford = effectiveQty > 0;
 
         List<String> lore = new ArrayList<>();
-        if (effectiveQty > 0) {
-            double cost = price * effectiveQty;
-            double fee  = cost * stockService.getStocks().get(stockId).brokerageFee();
+        if (effectiveQty > 0 && s != null) {
+            java.math.BigDecimal cost = price.multiply(java.math.BigDecimal.valueOf(effectiveQty));
+            java.math.BigDecimal fee  = cost.multiply(s.brokerageFee());
             if (action.startsWith("BUY")) {
-                lore.add("<gray>Custo: <white>$" + MoneyFormat.format(cost + fee));
-                lore.add("<gray>Corretagem: <yellow>$" + MoneyFormat.format(fee));
-                lore.add("<gray>Disponíveis: <yellow>" + available);
+                lore.add("<gray>Subtotal: <white>$" + MoneyFormat.format(cost));
+                lore.add("<gray>Corretagem (" + String.format("%.0f%%", s.brokerageFee().doubleValue() * 100) + "): <yellow>$" + MoneyFormat.format(fee));
+                lore.add("<gray>Total: <green><b>$" + MoneyFormat.format(cost.add(fee)) + "</b></green>");
+                lore.add("");
+                lore.add("<gray>Lote: <white>" + effectiveQty);
             } else {
-                lore.add("<gray>Recebe: <white>$" + MoneyFormat.format(cost - fee));
+                lore.add("<gray>Valor Bruto: <white>$" + MoneyFormat.format(price.multiply(java.math.BigDecimal.valueOf(effectiveQty))));
                 lore.add("<gray>Corretagem: <yellow>$" + MoneyFormat.format(fee));
-                lore.add("<gray>Em carteira: <yellow>" + available);
+                lore.add("<gray>Recebimento Líquido: <green><b>$" + MoneyFormat.format(cost.subtract(fee)) + "</b></green>");
+                lore.add("");
+                lore.add("<gray>Lote: <white>" + (qty < 0 ? "TUDO" : qty));
             }
         }
-        if (!canAfford) {
-            lore.add("<red>Quantidade insuficiente");
-            lore.add("<dark_red>Operação indisponível");
-            mat = action.startsWith("BUY") ? Material.GLASS_PANE : Material.GLASS_PANE;
+        if (effectiveQty <= 0) {
+            lore.add("<red>" + (action.startsWith("BUY") ? "Saldo ou ações insuficientes" : "Quantidade insuficiente"));
+            mat = Material.BARRIER;
         }
 
         ItemStack item = buildSimpleItem(mat, name, lore);
 
-        // Armazena metadados na lore final para o listener identificar a ação
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.getPersistentDataContainer().set(
-                    new org.bukkit.NamespacedKey(Bukkit.getPluginManager().getPlugin("ScoltEconomys"), "stock_action"),
-                    org.bukkit.persistence.PersistentDataType.STRING,
-                    action + ":" + stockId + ":" + effectiveQty
-            );
+            meta.getPersistentDataContainer().set(STOCK_ACTION_KEY, PersistentDataType.STRING, action + ":" + stockId + ":" + effectiveQty);
             item.setItemMeta(meta);
         }
         return item;
+    }
+
+    private java.math.BigDecimal proceeds(java.math.BigDecimal price, long qty) { return price.multiply(java.math.BigDecimal.valueOf(qty)); }
+
+    private ItemStack buildUserBalanceItem(Player player) {
+        java.math.BigDecimal balance = accountService.getWalletSync(player.getUniqueId());
+        return buildSimpleItem(Material.PLAYER_HEAD, "<gold><b>Seu Saldo Disponível</b></gold>",
+                List.of("<gray>Total em mãos: <green>$" + MoneyFormat.format(balance),
+                        "",
+                        "<gray><i>Você pode usar este saldo para</i>",
+                        "<gray><i>comprar novas ações.</i>"));
+    }
+
+    private ItemStack buildPortfolioSummaryItem(Map<String, StockHolding> holdings) {
+        java.math.BigDecimal totalInvested = java.math.BigDecimal.ZERO;
+        java.math.BigDecimal currentMarketValue = java.math.BigDecimal.ZERO;
+
+        for (StockHolding h : holdings.values()) {
+            java.math.BigDecimal cur = stockService.currentPrice(h.stockId());
+            totalInvested = totalInvested.add(h.avgPrice().multiply(java.math.BigDecimal.valueOf(h.quantity())));
+            currentMarketValue = currentMarketValue.add(cur.multiply(java.math.BigDecimal.valueOf(h.quantity())));
+        }
+
+        java.math.BigDecimal totalPnl = currentMarketValue.subtract(totalInvested);
+        double pnlPct = totalInvested.compareTo(java.math.BigDecimal.ZERO) > 0
+                ? totalPnl.divide(totalInvested, 4, java.math.RoundingMode.HALF_UP).doubleValue() * 100.0 : 0;
+        String pnlColor = totalPnl.compareTo(java.math.BigDecimal.ZERO) >= 0 ? "<green>" : "<red>";
+
+        return buildSimpleItem(Material.NETHERITE_UPGRADE_SMITHING_TEMPLATE, "<gradient:#9b59b6:#3498db><b>📊 PERFORMANCE GLOBAL</b></gradient>", List.of(
+                "<gray>Total Investido: <white>$" + MoneyFormat.format(totalInvested),
+                "<gray>Valor de Mercado: <white>$" + MoneyFormat.format(currentMarketValue),
+                "<gray>Lucro/Prejuízo: " + pnlColor + "<b>$" + MoneyFormat.format(totalPnl) + " (" + String.format("%+.2f%%", pnlPct) + ")</b>",
+                "",
+                "<gray><i>Patrimônio alocado em " + holdings.size() + " ativo(s)</i>"
+        ));
     }
 
     // -------------------------------------------------------
@@ -427,6 +510,19 @@ public final class StockMenuService {
 
     private ItemStack buildBorder() {
         return buildSimpleItem(Material.BLACK_STAINED_GLASS_PANE, "<black> </black>", List.of());
+    }
+
+    private void fillBorders(Inventory inv, int rows) {
+        ItemStack border = buildBorder();
+        // Linha superior
+        for (int i = 0; i < 9; i++) inv.setItem(i, border);
+        // Linha inferior
+        for (int i = (rows - 1) * 9; i < rows * 9; i++) inv.setItem(i, border);
+        // Laterais
+        for (int i = 1; i < rows - 1; i++) {
+            inv.setItem(i * 9, border);
+            inv.setItem(i * 9 + 8, border);
+        }
     }
 
     private void fillRow(Inventory inv, int row, ItemStack item) {

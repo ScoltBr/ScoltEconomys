@@ -1,5 +1,6 @@
 package me.scoltbr.scoltEconomys.account;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -9,7 +10,7 @@ public interface AccountRepository {
     void upsertBatch(List<PlayerAccount> accounts);
     List<TopBalanceRow> topTotal(int limit);
     void updatePlayerName(UUID uuid, String name);
-    java.util.OptionalDouble getWalletBalanceSync(UUID uuid);
-    boolean addWalletBalanceSync(UUID uuid, double amount);
+    Optional<BigDecimal> getWalletBalanceSync(UUID uuid);
+    boolean addWalletBalanceSync(UUID uuid, BigDecimal amount);
     GlobalEconomyData getGlobalEconomyData();
 }

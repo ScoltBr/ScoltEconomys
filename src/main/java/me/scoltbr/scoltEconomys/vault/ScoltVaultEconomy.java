@@ -8,6 +8,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.plugin.Plugin;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 public final class ScoltVaultEconomy extends AbstractEconomy {
@@ -47,7 +48,7 @@ public final class ScoltVaultEconomy extends AbstractEconomy {
 
     @Override
     public String format(double amount) {
-        return MoneyFormat.format(amount);
+        return MoneyFormat.format(BigDecimal.valueOf(amount));
     }
 
     public String getPluginName() {
@@ -62,8 +63,9 @@ public final class ScoltVaultEconomy extends AbstractEconomy {
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public boolean hasAccount(String playerName) {
-        OfflinePlayer p = Bukkit.getOfflinePlayer(playerName);
+        OfflinePlayer p = getOfflinePlayerSafe(playerName);
         return hasAccount(p);
     }
 
@@ -104,13 +106,14 @@ public final class ScoltVaultEconomy extends AbstractEconomy {
 
     @Override
     public double getBalance(OfflinePlayer player) {
-        // Usa o método de sincronização para suportar fallback direto de DB sem corromper/crashar
-        return accounts.getWalletSync(player.getUniqueId());
+        // Usa o método de sincronização para suportar fallback direto de DB sem
+        // corromper/crashar
+        return accounts.getWalletSync(player.getUniqueId()).doubleValue();
     }
 
     @Override
     public double getBalance(String playerName) {
-        return getBalance(Bukkit.getOfflinePlayer(playerName));
+        return getBalance(getOfflinePlayerSafe(playerName));
     }
 
     @Override
@@ -130,7 +133,7 @@ public final class ScoltVaultEconomy extends AbstractEconomy {
 
     @Override
     public boolean has(String playerName, double amount) {
-        return has(Bukkit.getOfflinePlayer(playerName), amount);
+        return has(getOfflinePlayerSafe(playerName), amount);
     }
 
     @Override
@@ -147,8 +150,9 @@ public final class ScoltVaultEconomy extends AbstractEconomy {
 
     @Override
     public EconomyResponse withdrawPlayer(OfflinePlayer player, double amount) {
-        if (amount < 0) return responseFail(amount, 0, "Amount must be positive");
-        boolean ok = accounts.addWalletSync(player.getUniqueId(), -amount);
+        if (amount < 0)
+            return responseFail(amount, 0, "Amount must be positive");
+        boolean ok = accounts.addWalletSync(player.getUniqueId(), java.math.BigDecimal.valueOf(-amount));
         return ok
                 ? responseOk(amount, getBalance(player))
                 : responseFail(amount, getBalance(player), "Insufficient funds");
@@ -156,7 +160,7 @@ public final class ScoltVaultEconomy extends AbstractEconomy {
 
     @Override
     public EconomyResponse withdrawPlayer(String playerName, double amount) {
-        return withdrawPlayer(Bukkit.getOfflinePlayer(playerName), amount);
+        return withdrawPlayer(getOfflinePlayerSafe(playerName), amount);
     }
 
     @Override
@@ -171,14 +175,15 @@ public final class ScoltVaultEconomy extends AbstractEconomy {
 
     @Override
     public EconomyResponse depositPlayer(OfflinePlayer player, double amount) {
-        if (amount < 0) return responseFail(amount, getBalance(player), "Amount must be positive");
-        accounts.addWalletSync(player.getUniqueId(), amount);
+        if (amount < 0)
+            return responseFail(amount, getBalance(player), "Amount must be positive");
+        accounts.addWalletSync(player.getUniqueId(), java.math.BigDecimal.valueOf(amount));
         return responseOk(amount, getBalance(player));
     }
 
     @Override
     public EconomyResponse depositPlayer(String playerName, double amount) {
-        return depositPlayer(Bukkit.getOfflinePlayer(playerName), amount);
+        return depositPlayer(getOfflinePlayerSafe(playerName), amount);
     }
 
     @Override
@@ -251,5 +256,12 @@ public final class ScoltVaultEconomy extends AbstractEconomy {
 
     private EconomyResponse responseFail(double amount, double balance, String error) {
         return new EconomyResponse(amount, balance, EconomyResponse.ResponseType.FAILURE, error);
+    }
+
+    @SuppressWarnings("deprecation")
+    private OfflinePlayer getOfflinePlayerSafe(String name) {
+        org.bukkit.entity.Player online = Bukkit.getPlayerExact(name);
+        if (online != null) return online;
+        return Bukkit.getOfflinePlayer(name);
     }
 }

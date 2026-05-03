@@ -12,6 +12,7 @@ import org.bukkit.plugin.Plugin;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
@@ -38,7 +39,7 @@ public final class StockMarketService {
     private final Map<String, Stock> stocks = new LinkedHashMap<>();
 
     /** Preços correntes em memória — atualizados pelo ticker */
-    private final ConcurrentHashMap<String, Double> currentPrices = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, java.math.BigDecimal> currentPrices = new ConcurrentHashMap<>();
 
     /**
      * Total de ações em posse de jogadores por empresa — para verificar disponibilidade.
@@ -99,10 +100,10 @@ public final class StockMarketService {
                     id,
                     c.getString("name", id),
                     c.getString("sector", "default"),
-                    c.getDouble("initial-price", 100.0),
+                    java.math.BigDecimal.valueOf(c.getDouble("initial-price", 100.0)),
                     c.getDouble("volatility", 0.05),
                     c.getLong("total-shares", 100_000L),
-                    c.getDouble("brokerage-fee", globalFee)
+                    java.math.BigDecimal.valueOf(c.getDouble("brokerage-fee", globalFee))
             );
             stocks.put(id, s);
             currentPrices.put(id, s.initialPrice());
@@ -141,8 +142,8 @@ public final class StockMarketService {
         return Optional.ofNullable(stocks.get(id));
     }
 
-    public double currentPrice(String stockId) {
-        return currentPrices.getOrDefault(stockId, 0.0);
+    public java.math.BigDecimal currentPrice(String stockId) {
+        return currentPrices.getOrDefault(stockId, java.math.BigDecimal.ZERO);
     }
 
     public long availableShares(String stockId) {
@@ -150,6 +151,22 @@ public final class StockMarketService {
         if (s == null) return 0;
         AtomicLong held = heldSharesCache.get(stockId);
         return Math.max(0, s.totalShares() - (held == null ? 0 : held.get()));
+    }
+
+    public void resetPrice(String stockId) {
+        Stock stock = stocks.get(stockId);
+        if (stock == null) return;
+        
+        java.math.BigDecimal initial = stock.initialPrice();
+        currentPrices.put(stockId, initial);
+        
+        // Reset market pressure
+        buyPressure.get(stockId).set(0);
+        sellPressure.get(stockId).set(0);
+
+        async.runAsync(() -> {
+            repo.savePrice(new StockPrice(stockId, initial, System.currentTimeMillis()));
+        });
     }
 
     // -------------------------------------------------------
@@ -175,17 +192,22 @@ public final class StockMarketService {
             long available = availableShares(stockId);
             if (available < qty) return BuyResult.fail("insufficient-supply");
 
-            double price = currentPrices.getOrDefault(stockId, stock.initialPrice());
-            double cost  = price * qty;
-            double fee   = cost * stock.brokerageFee();
-            double total = cost + fee;
+            java.math.BigDecimal price = currentPrices.getOrDefault(stockId, stock.initialPrice());
+            java.math.BigDecimal cost  = price.multiply(java.math.BigDecimal.valueOf(qty)).setScale(2, java.math.RoundingMode.HALF_UP);
+            java.math.BigDecimal fee   = cost.multiply(stock.brokerageFee()).setScale(2, java.math.RoundingMode.HALF_UP);
+            java.math.BigDecimal total = cost.add(fee);
 
-            // Debita da carteira (AccountService usa StripedLocks por UUID)
-            boolean ok = accountService.withdrawWallet(uuid, total);
+            boolean ok;
+            try {
+                ok = accountService.withdrawWallet(uuid, total);
+            } catch (IllegalStateException e) {
+                return BuyResult.fail("player-offline");
+            }
+
             if (!ok) return BuyResult.fail("insufficient-funds");
 
             // Taxa para o tesouro
-            if (fee > 0) treasury.collect(fee);
+            if (fee.compareTo(java.math.BigDecimal.ZERO) > 0) treasury.collect(fee);
 
             // Atualiza cache de ações em posse
             heldSharesCache.computeIfAbsent(stockId, k -> new AtomicLong(0)).addAndGet(qty);
@@ -224,7 +246,7 @@ public final class StockMarketService {
     }
 
     private SellResult sellSync(UUID uuid, String stockId, long qty) {
-        if (qty <= 0) return SellResult.fail("invalid-quantity");
+        if (qty <= 0 && qty != -1) return SellResult.fail("invalid-quantity");
 
         Stock stock = stocks.get(stockId);
         if (stock == null) return SellResult.fail("unknown-stock");
@@ -233,46 +255,56 @@ public final class StockMarketService {
         lock.lock();
         try {
             Optional<StockHolding> holdingOpt = repo.getHolding(uuid, stockId);
-            if (holdingOpt.isEmpty() || holdingOpt.get().quantity() < qty) {
+            if (holdingOpt.isEmpty() || holdingOpt.get().quantity() <= 0) {
+                return SellResult.fail("insufficient-holding");
+            }
+
+            long actualQty = qty == -1 ? holdingOpt.get().quantity() : qty;
+
+            if (holdingOpt.get().quantity() < actualQty) {
                 return SellResult.fail("insufficient-holding");
             }
 
             StockHolding holding = holdingOpt.get();
-            double price    = currentPrices.getOrDefault(stockId, stock.initialPrice());
-            double proceeds = price * qty;
-            double fee      = proceeds * stock.brokerageFee();
-            double net      = proceeds - fee;
-            double profit   = (price - holding.avgPrice()) * qty - fee;
-
-            // Taxa para o tesouro
-            if (fee > 0) treasury.collect(fee);
+            java.math.BigDecimal price    = currentPrices.getOrDefault(stockId, stock.initialPrice());
+            java.math.BigDecimal proceeds = price.multiply(java.math.BigDecimal.valueOf(actualQty)).setScale(2, java.math.RoundingMode.HALF_UP);
+            java.math.BigDecimal fee      = proceeds.multiply(stock.brokerageFee()).setScale(2, java.math.RoundingMode.HALF_UP);
+            java.math.BigDecimal net      = proceeds.subtract(fee);
+            java.math.BigDecimal profit   = price.subtract(holding.avgPrice()).multiply(java.math.BigDecimal.valueOf(actualQty)).subtract(fee).setScale(2, java.math.RoundingMode.HALF_UP);
 
             // Credita na carteira
-            accountService.depositWallet(uuid, net);
+            try {
+                accountService.depositWallet(uuid, net);
+            } catch (IllegalStateException e) {
+                return SellResult.fail("player-offline");
+            }
+
+            // Taxa para o tesouro
+            if (fee.compareTo(java.math.BigDecimal.ZERO) > 0) treasury.collect(fee);
 
             // Atualiza cache
-            heldSharesCache.computeIfAbsent(stockId, k -> new AtomicLong(0)).addAndGet(-qty);
+            heldSharesCache.computeIfAbsent(stockId, k -> new AtomicLong(0)).addAndGet(-actualQty);
 
             // Pressão de mercado
-            sellPressure.get(stockId).addAndGet(qty);
+            sellPressure.get(stockId).addAndGet(actualQty);
 
             // Persiste
-            StockHolding updated = holding.remove(qty);
+            StockHolding updated = holding.remove(actualQty);
             if (updated.quantity() <= 0) {
                 repo.deleteHolding(uuid, stockId);
             } else {
                 repo.upsertHolding(updated);
             }
-            repo.recordTransaction(uuid, stockId, "SELL", qty, price, net);
+            repo.recordTransaction(uuid, stockId, "SELL", actualQty, price, net);
 
             // Fire event (sync)
             Bukkit.getScheduler().runTask(plugin, () -> {
                 Bukkit.getPluginManager().callEvent(new StockTransactionEvent(
-                        uuid, stockId, StockTransactionEvent.TransactionType.SELL, qty, price, net, fee
+                        uuid, stockId, StockTransactionEvent.TransactionType.SELL, actualQty, price, net, fee
                 ));
             });
 
-            return SellResult.ok(qty, net, fee, profit, price);
+            return SellResult.ok(actualQty, net, fee, profit, price);
         } finally {
             lock.unlock();
         }
@@ -308,10 +340,11 @@ public final class StockMarketService {
     // -------------------------------------------------------
 
     public void tick() {
-        Random rand = new Random();
+        // ThreadLocalRandom: reutilizado por thread, sem alocação — correto para uso em async scheduler
+        ThreadLocalRandom rand = ThreadLocalRandom.current();
 
         for (Stock stock : stocks.values()) {
-            double cur = currentPrices.getOrDefault(stock.id(), stock.initialPrice());
+            java.math.BigDecimal cur = currentPrices.getOrDefault(stock.id(), stock.initialPrice());
 
             // 1. Drift aleatório (distribuição normal, desvio = volatilidade da empresa)
             double drift    = rand.nextGaussian() * stock.volatility();
@@ -328,14 +361,15 @@ public final class StockMarketService {
             // 4. Calcula novo preço e aplica limites
             double changePct = drift + pressure + sectorBoost;
             changePct = Math.max(-maxChangePct, Math.min(maxChangePct, changePct));
-            double newPrice = Math.max(minPrice, cur * (1.0 + changePct));
+            java.math.BigDecimal newPrice = java.math.BigDecimal.valueOf(Math.max(minPrice, cur.doubleValue() * (1.0 + changePct)))
+                    .setScale(2, java.math.RoundingMode.HALF_UP);
 
             currentPrices.put(stock.id(), newPrice);
             repo.savePrice(new StockPrice(stock.id(), newPrice, System.currentTimeMillis()));
 
             // Batched sync events
-            final double finalOld = cur;
-            final double finalNew = newPrice;
+            final java.math.BigDecimal finalOld = cur;
+            final java.math.BigDecimal finalNew = newPrice;
             Bukkit.getScheduler().runTask(plugin, () -> {
                 Bukkit.getPluginManager().callEvent(new StockPriceUpdateEvent(stock.id(), finalOld, finalNew));
             });

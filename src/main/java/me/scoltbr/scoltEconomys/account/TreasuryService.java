@@ -14,7 +14,7 @@ public final class TreasuryService {
     private final Plugin plugin;
     private final DataSource ds;
     private final boolean enabled;
-    private double treasuryWallet;
+    private java.math.BigDecimal treasuryWallet;
     private boolean dirty;
     private int taskId;
 
@@ -23,7 +23,7 @@ public final class TreasuryService {
         this.ds = ds;
         ConfigurationSection section = plugin.getConfig().getConfigurationSection("treasury");
         this.enabled = section != null && section.getBoolean("enabled", true);
-        this.treasuryWallet = 0.0;
+        this.treasuryWallet = java.math.BigDecimal.ZERO;
         this.dirty = false;
         this.taskId = -1;
     }
@@ -35,7 +35,8 @@ public final class TreasuryService {
                 PreparedStatement ps = c.prepareStatement("SELECT balance FROM se_treasury WHERE id = 1")) {
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    this.treasuryWallet = rs.getDouble("balance");
+                    java.math.BigDecimal b = rs.getBigDecimal("balance");
+                    if (b != null) this.treasuryWallet = b;
                 }
             }
         } catch (SQLException e) {
@@ -50,12 +51,12 @@ public final class TreasuryService {
         if (!enabled || !dirty)
             return;
 
-        double currentBalance = treasuryWallet;
+        java.math.BigDecimal currentBalance = treasuryWallet;
         dirty = false;
 
         try (Connection c = ds.getConnection();
                 PreparedStatement ps = c.prepareStatement("UPDATE se_treasury SET balance = ? WHERE id = 1")) {
-            ps.setDouble(1, currentBalance);
+            ps.setBigDecimal(1, currentBalance);
             ps.executeUpdate();
         } catch (SQLException e) {
             plugin.getLogger().warning("Failed to save treasury balance: " + e.getMessage());
@@ -69,14 +70,14 @@ public final class TreasuryService {
         flush();
     }
 
-    public synchronized void collect(double amount) {
-        if (!enabled || amount <= 0)
+    public synchronized void collect(java.math.BigDecimal amount) {
+        if (!enabled || amount.compareTo(java.math.BigDecimal.ZERO) <= 0)
             return;
-        treasuryWallet += amount;
+        treasuryWallet = treasuryWallet.add(amount);
         dirty = true;
     }
 
-    public synchronized double balance() {
+    public synchronized java.math.BigDecimal balance() {
         return treasuryWallet;
     }
 }

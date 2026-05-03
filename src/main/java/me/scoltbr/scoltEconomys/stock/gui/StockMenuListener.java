@@ -26,6 +26,8 @@ import org.bukkit.plugin.Plugin;
  */
 public final class StockMenuListener implements Listener {
 
+    private static final NamespacedKey STOCK_ID_KEY =
+            new NamespacedKey("scolteconomys", "stock_id");
     private static final NamespacedKey STOCK_ACTION_KEY =
             new NamespacedKey("scolteconomys", "stock_action");
 
@@ -50,12 +52,15 @@ public final class StockMenuListener implements Listener {
         if (clicked == null || clicked.getType().isAir()) return;
 
         ItemMeta meta = clicked.getItemMeta();
-        int rawSlot = event.getRawSlot();  // slot no inventário superior
+        if (meta == null) return;
+
+        // Som de clique padrão
+        player.playSound(player.getLocation(), org.bukkit.Sound.UI_BUTTON_CLICK, 0.5f, 1.0f);
 
         switch (holder.type()) {
-            case MARKET         -> handleMarketClick(player, clicked, meta, holder, rawSlot);
+            case MARKET         -> handleMarketClick(player, clicked, meta);
             case COMPANY_DETAIL -> handleDetailClick(player, clicked, meta, holder);
-            case PORTFOLIO      -> handlePortfolioClick(player, clicked, meta, rawSlot);
+            case PORTFOLIO      -> handlePortfolioClick(player, clicked, meta);
             case TOP_HOLDERS    -> handleTopHoldersClick(player, clicked, meta, holder);
         }
     }
@@ -64,9 +69,8 @@ public final class StockMenuListener implements Listener {
     // MARKET
     // -------------------------------------------------------
 
-    private void handleMarketClick(Player player, ItemStack item, ItemMeta meta, StockMenuHolder holder, int slot) {
+    private void handleMarketClick(Player player, ItemStack item, ItemMeta meta) {
         if (item.getType() == org.bukkit.Material.CHEST) {
-            player.closeInventory();
             menuService.openPortfolio(player);
             return;
         }
@@ -74,11 +78,10 @@ public final class StockMenuListener implements Listener {
             player.closeInventory();
             return;
         }
-        // Slot = índice na empresa no mapa de stocks
-        String[] ids = stockService.getStocks().keySet().toArray(new String[0]);
-        if (slot >= 0 && slot < ids.length) {
-            player.closeInventory();
-            menuService.openCompanyDetail(player, ids[slot]);
+
+        String stockId = meta.getPersistentDataContainer().get(STOCK_ID_KEY, PersistentDataType.STRING);
+        if (stockId != null) {
+            menuService.openCompanyDetail(player, stockId);
         }
     }
 
@@ -89,19 +92,16 @@ public final class StockMenuListener implements Listener {
     private void handleDetailClick(Player player, ItemStack item, ItemMeta meta, StockMenuHolder holder) {
         // Voltar para o mercado
         if (item.getType() == org.bukkit.Material.ARROW) {
-            player.closeInventory();
             menuService.openMarket(player);
             return;
         }
         // Top acionistas
         if (item.getType() == org.bukkit.Material.PLAYER_HEAD) {
-            player.closeInventory();
             menuService.openTopHolders(player, holder.stockId());
             return;
         }
 
         // Verifica se é um botão de compra/venda via PDC
-        if (meta == null) return;
         String rawAction = meta.getPersistentDataContainer().get(STOCK_ACTION_KEY, PersistentDataType.STRING);
         if (rawAction == null) return;
 
@@ -114,29 +114,18 @@ public final class StockMenuListener implements Listener {
         long qty;
         try { qty = Long.parseLong(parts[2]); } catch (NumberFormatException e) { return; }
 
-        player.closeInventory();
-
         switch (action) {
-            case "BUY" -> stockService.buyAsync(player.getUniqueId(), stockId, qty,
+            case "BUY", "BUY_MAX" -> stockService.buyAsync(player.getUniqueId(), stockId, qty,
                     result -> onBuyResult(player, result, stockId));
-            case "BUY_MAX" -> {
-                long available = stockService.availableShares(stockId);
-                if (available <= 0) {
-                    MessageUtils.sendError(player, "Sem ações disponíveis para esta empresa.");
-                    return;
-                }
-                stockService.buyAsync(player.getUniqueId(), stockId, available,
-                        result -> onBuyResult(player, result, stockId));
-            }
             case "SELL" -> stockService.sellAsync(player.getUniqueId(), stockId, qty,
                     result -> onSellResult(player, result, stockId));
             case "SELL_ALL" -> {
-                // qty aqui já é a quantidade em posse (passada pelo buildActionButton)
                 if (qty <= 0) {
+                    player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_NOTE_BLOCK_BASS, 1.0f, 0.5f);
                     MessageUtils.sendError(player, "Você não possui ações desta empresa.");
                     return;
                 }
-                stockService.sellAsync(player.getUniqueId(), stockId, qty,
+                stockService.sellAsync(player.getUniqueId(), stockId, -1,
                         result -> onSellResult(player, result, stockId));
             }
         }
@@ -146,17 +135,15 @@ public final class StockMenuListener implements Listener {
     // PORTFOLIO
     // -------------------------------------------------------
 
-    private void handlePortfolioClick(Player player, ItemStack item, ItemMeta meta, int slot) {
+    private void handlePortfolioClick(Player player, ItemStack item, ItemMeta meta) {
         if (item.getType() == org.bukkit.Material.ARROW) {
-            player.closeInventory();
             menuService.openMarket(player);
             return;
         }
-        // Clique em uma holding → slot = posição na lista de empresas
-        String[] ids = stockService.getStocks().keySet().toArray(new String[0]);
-        if (slot >= 0 && slot < ids.length) {
-            player.closeInventory();
-            menuService.openCompanyDetail(player, ids[slot]);
+        
+        String stockId = meta.getPersistentDataContainer().get(STOCK_ID_KEY, PersistentDataType.STRING);
+        if (stockId != null) {
+            menuService.openCompanyDetail(player, stockId);
         }
     }
 
@@ -166,7 +153,6 @@ public final class StockMenuListener implements Listener {
 
     private void handleTopHoldersClick(Player player, ItemStack item, ItemMeta meta, StockMenuHolder holder) {
         if (item.getType() == org.bukkit.Material.ARROW) {
-            player.closeInventory();
             menuService.openCompanyDetail(player, holder.stockId());
         }
     }
@@ -190,7 +176,7 @@ public final class StockMenuListener implements Listener {
         MessageUtils.send(player,
                 "<green>✔ Você comprou <white>" + result.qty() + " ação(ões)</white> de " +
                 "<aqua>" + stockId + "</aqua> por <white>$" + MoneyFormat.format(result.totalPaid()) + "</white>.");
-        if (result.fee() > 0) {
+        if (result.fee().compareTo(java.math.BigDecimal.ZERO) > 0) {
             MessageUtils.send(player, "<gray>Corretagem paga: <yellow>$" + MoneyFormat.format(result.fee()));
         }
         MessageUtils.playSuccess(player);
@@ -210,13 +196,13 @@ public final class StockMenuListener implements Listener {
             return;
         }
 
-        String profitColor = result.profit() >= 0 ? "<green>" : "<red>";
+        String profitColor = result.profit().compareTo(java.math.BigDecimal.ZERO) >= 0 ? "<green>" : "<red>";
         MessageUtils.send(player,
                 "<green>✔ Você vendeu <white>" + result.qty() + " ação(ões)</white> de " +
                 "<aqua>" + stockId + "</aqua> e recebeu <white>$" + MoneyFormat.format(result.net()) + "</white>.");
         MessageUtils.send(player,
                 "<gray>Lucro/Prejuízo: " + profitColor + "$" + MoneyFormat.format(result.profit()));
-        if (result.fee() > 0) {
+        if (result.fee().compareTo(java.math.BigDecimal.ZERO) > 0) {
             MessageUtils.send(player, "<gray>Corretagem: <yellow>$" + MoneyFormat.format(result.fee()));
         }
         MessageUtils.playSuccess(player);

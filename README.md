@@ -1,136 +1,80 @@
-# 💰 ScoltEconomy
+# 💰 ScoltEconomys
 
-Sistema de economia avançado para servidores **Paper 1.21.1+**,
-projetado para alta performance, escalabilidade e controle
-administrativo completo.
+![Java](https://img.shields.io/badge/Java-21-orange?style=for-the-badge&logo=java)
+![Paper](https://img.shields.io/badge/Paper-1.21.1+-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-1.1.0-green?style=for-the-badge)
+![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)
 
-------------------------------------------------------------------------
+O **ScoltEconomys** é um ecossistema financeiro completo e de alta precisão para servidores Minecraft. Diferente de plugins de economia comuns, ele utiliza o motor matemático `BigDecimal` para garantir que nenhuma fração de centavo seja perdida em cálculos complexos, taxas ou juros.
 
-## 🚀 Visão Geral
+---
 
-O **ScoltEconomy** é um plugin de economia moderno com arquitetura
-modular, foco em performance e preparado para servidores com **300+
-jogadores simultâneos**.
+## 🚀 Diferenciais Exclusivos
 
-Desenvolvido com princípios de:
+### 🪙 Precisão Financeira Absoluta (BigDecimal)
+Esqueça erros de arredondamento comuns em double/float. Todo o sistema financeiro, do `/money` ao Mercado de Ações, opera com precisão arbitrária, ideal para economias com números gigantescos ou transações bancárias minuciosas.
 
--   🧠 Arquitetura limpa
--   ⚡ Operações assíncronas
--   📦 Cache inteligente
--   🛢️ Persistência em MySQL
--   📊 Monitoramento econômico
--   🔌 Compatibilidade completa com Vault
--   📡 Sistema de API Pública para desenvolvedores
+### 🌍 Mercado Global de Commodities
+Um sistema dinâmico de oferta e demanda. Os jogadores podem vender recursos (minérios, energia, agrícolas) para um mercado global onde os preços flutuam em tempo real com base no volume de vendas e eventos econômicos.
+- **Setores:** Metais, Energia, Agrícola, Raros.
+- **Variação Dinâmica:** Preços sobem e descem conforme a escassez.
 
-------------------------------------------------------------------------
+### 📈 Bolsa de Valores (Stock Market)
+Invista em empresas virtuais do servidor.
+- **Drift & Pressão:** Algoritmo sofisticado de oscilação.
+- **Dividendos:** Receba lucros passivos por suas ações.
+- **Portfólio:** Acompanhe seus investimentos em uma interface moderna.
 
-## 🏗️ Arquitetura
+### 🏦 Sistema Bancário & Tesouro
+- **Banco:** Proteja seu dinheiro, ganhe juros e pague impostos de renda automáticos.
+- **Tesouro:** O servidor possui um tesouro central que coleta taxas, podendo ser usado para eventos ou gestão governamental.
 
-O plugin é dividido em módulos independentes:
+---
 
--   `account/` → Sistema de contas (wallet + banco)
--   `bank/` → Sistema bancário com juros
--   `tax/` → Sistema de impostos dinâmicos
--   `stats/` → Monitoramento e saúde econômica
--   `admin/` → GUI administrativa
--   `stock/` → Mercado de Ações (Bolsa de Valores)
--   `api/` → Interface pública e eventos customizados
--   `database/` → Conexão MySQL + HikariCP
--   `scheduler/` → Execução assíncrona segura
--   `vault/` → Integração completa com Vault API
+## 🛠️ Comandos e Funcionalidades
 
-------------------------------------------------------------------------
+| Comando | Descrição | Aliases |
+| :--- | :--- | :--- |
+| `/money` | Comando principal de economia. | `/bal`, `/carteira` |
+| `/commodities` | Acessa o Mercado Global de Commodities. | `/comm`, `/mercado` |
+| `/bolsa` | Interface da Bolsa de Valores. | `/stocks`, `/investir` |
+| `/pay <player> <val>` | Transfere dinheiro para outro jogador. | `/enviar` |
+| `/eco <admin>` | Gerenciamento administrativo completo. | `/economy` |
 
-## 🔥 Funcionalidades
+---
 
-### 💳 Sistema de Contas
+## 🎨 Visual Moderno (MiniMessage)
+O plugin utiliza a tecnologia **MiniMessage**, permitindo cores vibrantes, gradientes suaves e elementos interativos no chat (hover e click) que facilitam a navegação do jogador sem poluir a tela.
 
--   Wallet e Banco separados
--   Cache em memória com Caffeine
--   Salvamento em batch assíncrono
--   Lock por UUID (thread-safe)
+- **Dica:** O sistema suporta tanto as tags modernas `<color>` quanto os códigos legados `&a`, convertendo-os automaticamente para o formato de alta performance.
 
-### 📈 Mercado de Ações (Beta)
+---
 
--   Simulação dinâmica baseada em "Drift" e "Pressão"
--   Setores econômicos com bônus/penalidades
--   GUI de investimentos intuitiva (`/bolsa`)
--   Histórico de preços persistente
+## 🏗️ Arquitetura Técnica
+O projeto foi construído seguindo os melhores padrões de desenvolvimento:
+- **Async Processing:** Operações de banco de dados e cálculos de mercado não travam a main thread.
+- **HikariCP:** Pool de conexões otimizado para MySQL/MariaDB.
+- **Caffeine Cache:** Acesso instantâneo a saldos de jogadores online.
+- **Modularidade:** Fácil expansão para novos tipos de mercados (ex: Forex, Cripto).
 
-### 🏦 Sistema Bancário
+---
 
--   Depósito e saque
--   Juros configuráveis e automáticos
--   Taxa de saque progressiva
--   Controle anti-inflação
+## 🔧 Instalação e Requisitos
+1. **Versão:** Minecraft 1.21.1 ou superior.
+2. **Java:** 21.
+3. **Dependências:** Requer um provedor de banco de dados (MySQL recomendado).
+4. **Build:** Utilize Maven para compilar o `.jar`.
 
-### 📊 Economia Inteligente
-
--   Cálculo de concentração de riqueza
--   Alertas automáticos de inflação no Admin Panel
--   Snapshot diário da saúde do servidor
-
-### 🔌 API Pública e Eventos
-
--   Eventos canceláveis para integração (ex: BalanceChange)
--   Acesso simplificado via `ScoltAPI.get()`
--   Documentação Javadoc em todos os métodos
-
-------------------------------------------------------------------------
-
-## 🛠️ Para Desenvolvedores
-
-### Dependência (Maven)
-
-```xml
-<dependency>
-    <groupId>me.scoltbr</groupId>
-    <artifactId>scolteconomy</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
-    <scope>provided</scope>
-</dependency>
+```bash
+mvn clean package
 ```
 
-### Usando a API
+---
 
-```java
-// Obter a instância da API
-ScoltEconomyAPI api = ScoltAPI.get();
+## 👨‍💻 Créditos e Contato
+**Desenvolvido por ScoltBr**
+*Focado em criar sistemas econômicos que transformam a gameplay em uma simulação viva e competitiva.*
 
-// Consultar saldo de forma assíncrona
-api.getWalletAsync(uuid, balance -> {
-    player.sendMessage("Saldo: " + balance);
-});
-
-// Transferência com taxas
-api.transfer(from, to, 1000.0, result -> {
-    if (result.success()) {
-        System.out.println("Enviado! Taxa retida: " + result.fee());
-    }
-});
-```
-
-### Eventos Disponíveis
-
--   `AccountBalanceChangeEvent`: Disparado em qualquer alteração de saldo. Pode ser cancelado.
--   `StockPriceUpdateEvent`: Disparado quando o preço de uma ação oscila.
--   `StockTransactionEvent`: Disparado após uma compra ou venda de ações.
-
-------------------------------------------------------------------------
-
-## ⚙️ Tecnologias Utilizadas
-
--   Java 21
--   Paper API 1.21.1+
--   Maven
--   MySQL + HikariCP
--   Caffeine Cache
--   Vault API
-
-------------------------------------------------------------------------
-
-## 👨‍💻 Desenvolvido por
-
-**ScoltBr**\
-Projeto focado em arquitetura de plugins premium e economia escalável
-para Minecraft.
+---
+> [!TIP]
+> Use `/commodities listar` para ver as melhores oportunidades de lucro hoje!

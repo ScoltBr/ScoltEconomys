@@ -3,6 +3,7 @@ package me.scoltbr.scoltEconomys.audit;
 import me.scoltbr.scoltEconomys.scheduler.AsyncExecutor;
 import org.bukkit.plugin.Plugin;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -23,10 +24,10 @@ public final class TransactionAuditService {
         } else {
             this.fileSink = null;
         }
-        
+
         this.consoleEnabled = plugin.getConfig().getBoolean("audit.console.enabled", false);
     }
-    
+
     public void stop() {
         if (fileSink != null) {
             fileSink.close();
@@ -35,13 +36,13 @@ public final class TransactionAuditService {
 
     // Método genérico
     public void record(TransactionType type,
-                       UUID from,
-                       UUID to,
-                       double gross,
-                       double net,
-                       double fee,
-                       String source,
-                       String context) {
+            UUID from,
+            UUID to,
+            BigDecimal gross,
+            BigDecimal net,
+            BigDecimal fee,
+            String source,
+            String context) {
 
         if (fileSink != null) {
             fileSink.append(new TransactionRecord(Instant.now(), type, from, to, gross, net, fee, source, context));
@@ -58,8 +59,7 @@ public final class TransactionAuditService {
                                 " | fee=" + fee +
                                 " | source=" + source +
                                 " | ctx=" + context +
-                                " | at=" + Instant.now()
-                );
+                                " | at=" + Instant.now());
             });
         }
     }
@@ -68,42 +68,39 @@ public final class TransactionAuditService {
     // Admin helpers
     // ----------------------------
 
-    public void recordAdminGive(String adminName, UUID target, double amount) {
+    public void recordAdminGive(String adminName, UUID target, BigDecimal amount) {
         record(
                 TransactionType.ADMIN_GIVE,
                 null,
                 target,
                 amount,
                 amount,
-                0.0,
+                BigDecimal.ZERO,
                 "admin:" + adminName,
-                "eco give"
-        );
+                "eco give");
     }
 
-    public void recordAdminTake(String adminName, UUID target, double amount) {
+    public void recordAdminTake(String adminName, UUID target, BigDecimal amount) {
         record(
                 TransactionType.ADMIN_TAKE,
                 target,
                 null,
                 amount,
                 amount,
-                0.0,
+                BigDecimal.ZERO,
                 "admin:" + adminName,
-                "eco take"
-        );
+                "eco take");
     }
 
-    public void recordAdminSet(String adminName, UUID target, double newValue) {
+    public void recordAdminSet(String adminName, UUID target, BigDecimal newValue) {
         record(
                 TransactionType.ADMIN_SET,
                 null,
                 target,
                 newValue,
                 newValue,
-                0.0,
+                BigDecimal.ZERO,
                 "admin:" + adminName,
-                "eco set"
-        );
+                "eco set");
     }
 }

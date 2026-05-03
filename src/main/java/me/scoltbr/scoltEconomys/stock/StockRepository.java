@@ -19,7 +19,7 @@ public interface StockRepository {
 
     void deleteHolding(UUID uuid, String stockId);
 
-    void recordTransaction(UUID uuid, String stockId, String type, long qty, double price, double total);
+    void recordTransaction(UUID uuid, String stockId, String type, long qty, java.math.BigDecimal price, java.math.BigDecimal total);
 
     List<StockHolding> getTopHolders(String stockId, int limit);
 

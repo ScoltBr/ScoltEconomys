@@ -18,6 +18,11 @@ public final class AccountFlushService {
         this.async = async;
         this.cache = cache;
         this.repo = repo;
+        
+        // Garante que se o cache expirar uma conta "suja", ela será salva no banco
+        this.cache.setEvictionHandler(acc -> {
+            async.runAsync(() -> saveBatch(List.of(acc)));
+        });
     }
 
     /**
@@ -97,14 +102,17 @@ public final class AccountFlushService {
             cache.markDirty(uuid);
 
             async.runAsync(() -> {
+                boolean success = false;
                 try {
                     repo.upsertBatch(List.of(acc));
                     acc.clearDirty();
+                    success = true;
                 } catch (Exception e) {
+                    plugin.getLogger().severe("Erro ao salvar conta de " + uuid + " no quit: " + e.getMessage());
                     cache.requeueDirty(uuid);
                 } finally {
-                    // remove do cache depois da tentativa de salvar, apenas se ainda offline
-                    if (org.bukkit.Bukkit.getPlayer(uuid) == null) {
+                    // remove do cache apenas se salvou com sucesso e o jogador continuar offline
+                    if (success && org.bukkit.Bukkit.getPlayer(uuid) == null) {
                         cache.remove(uuid);
                     }
                 }

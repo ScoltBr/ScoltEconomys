@@ -11,9 +11,11 @@ import java.util.*;
 import java.util.function.Consumer;
 
 /**
- * Implementação da {@link ScoltEconomyAPI} que delega para os serviços internos do plugin.
+ * Implementação da {@link ScoltEconomyAPI} que delega para os serviços internos
+ * do plugin.
  *
- * Esta classe é interna — os outros plugins devem depender apenas de {@link ScoltEconomyAPI}.
+ * Esta classe é interna — os outros plugins devem depender apenas de
+ * {@link ScoltEconomyAPI}.
  */
 public final class ScoltEconomyAPIImpl implements ScoltEconomyAPI {
 
@@ -23,17 +25,17 @@ public final class ScoltEconomyAPIImpl implements ScoltEconomyAPI {
     private final TreasuryService treasuryService;
     private final EventManager eventManager;
     @SuppressWarnings("unused")
-    private final AsyncExecutor async;        // reservado para futuros métodos async internos
+    private final AsyncExecutor async; // reservado para futuros métodos async internos
     @SuppressWarnings("unused")
-    private final Plugin plugin;              // reservado para agendamento na main thread
+    private final Plugin plugin; // reservado para agendamento na main thread
     private final StockMarketService stockMarketService; // nullable
 
     public ScoltEconomyAPIImpl(Plugin plugin,
-                                AsyncExecutor async,
-                                AccountService accountService,
-                                TreasuryService treasuryService,
-                                EventManager eventManager,
-                                StockMarketService stockMarketService) {
+            AsyncExecutor async,
+            AccountService accountService,
+            TreasuryService treasuryService,
+            EventManager eventManager,
+            StockMarketService stockMarketService) {
         this.plugin = plugin;
         this.async = async;
         this.accountService = accountService;
@@ -56,34 +58,37 @@ public final class ScoltEconomyAPIImpl implements ScoltEconomyAPI {
     // -------------------------------------------------------
 
     @Override
-    public double getWallet(UUID uuid) {
+    public java.math.BigDecimal getWallet(UUID uuid) {
         return accountService.getCached(uuid)
                 .map(a -> a.wallet())
-                .orElse(0.0);
+                .orElse(java.math.BigDecimal.ZERO);
     }
 
     @Override
-    public double getBank(UUID uuid) {
+    public java.math.BigDecimal getBank(UUID uuid) {
         return accountService.getCached(uuid)
                 .map(a -> a.bank())
-                .orElse(0.0);
+                .orElse(java.math.BigDecimal.ZERO);
     }
 
     @Override
-    public void depositWallet(UUID uuid, double amount) {
-        if (amount <= 0) return;
+    public void depositWallet(UUID uuid, java.math.BigDecimal amount) {
+        if (amount.compareTo(java.math.BigDecimal.ZERO) <= 0)
+            return;
         accountService.depositWallet(uuid, amount);
     }
 
     @Override
-    public boolean withdrawWallet(UUID uuid, double amount) {
-        if (amount <= 0) return false;
+    public boolean withdrawWallet(UUID uuid, java.math.BigDecimal amount) {
+        if (amount.compareTo(java.math.BigDecimal.ZERO) <= 0)
+            return false;
         return accountService.withdrawWallet(uuid, amount);
     }
 
     @Override
-    public void setWallet(UUID uuid, double value) {
-        if (value < 0) return;
+    public void setWallet(UUID uuid, java.math.BigDecimal value) {
+        if (value.compareTo(java.math.BigDecimal.ZERO) < 0)
+            return;
         accountService.setWallet(uuid, value);
     }
 
@@ -92,7 +97,7 @@ public final class ScoltEconomyAPIImpl implements ScoltEconomyAPI {
     // -------------------------------------------------------
 
     @Override
-    public void getWalletAsync(UUID uuid, Consumer<Double> callback) {
+    public void getWalletAsync(UUID uuid, Consumer<java.math.BigDecimal> callback) {
         // Tenta cache primeiro; se não estiver, carrega do DB
         Optional<me.scoltbr.scoltEconomys.account.PlayerAccount> cached = accountService.getCached(uuid);
         if (cached.isPresent()) {
@@ -107,16 +112,15 @@ public final class ScoltEconomyAPIImpl implements ScoltEconomyAPI {
     // -------------------------------------------------------
 
     @Override
-    public void transfer(UUID from, UUID to, double amount, Consumer<TransferResult> callback) {
-        // loadamos ambos os jogadores e executamos na main thread (AccountService não é async)
-        accountService.getOrLoad(from, fromAcc ->
-            accountService.getOrLoad(to, toAcc -> {
-                var internal = accountService.transferWallet(from, to, amount);
-                callback.accept(internal.success()
-                        ? TransferResult.ok(internal.net(), internal.fee())
-                        : TransferResult.fail(internal.reason()));
-            })
-        );
+    public void transfer(UUID from, UUID to, java.math.BigDecimal amount, Consumer<TransferResult> callback) {
+        // loadamos ambos os jogadores e executamos na main thread (AccountService não é
+        // async)
+        accountService.getOrLoad(from, fromAcc -> accountService.getOrLoad(to, toAcc -> {
+            var internal = accountService.transferWallet(from, to, amount);
+            callback.accept(internal.success()
+                    ? TransferResult.ok(internal.net(), internal.fee())
+                    : TransferResult.fail(internal.reason()));
+        }));
     }
 
     // -------------------------------------------------------
@@ -124,7 +128,7 @@ public final class ScoltEconomyAPIImpl implements ScoltEconomyAPI {
     // -------------------------------------------------------
 
     @Override
-    public void depositToBank(UUID uuid, double amount, Consumer<BankResult> callback) {
+    public void depositToBank(UUID uuid, java.math.BigDecimal amount, Consumer<BankResult> callback) {
         accountService.getOrLoad(uuid, acc -> {
             var result = accountService.depositToBank(uuid, amount);
             callback.accept(result.success()
@@ -134,7 +138,7 @@ public final class ScoltEconomyAPIImpl implements ScoltEconomyAPI {
     }
 
     @Override
-    public void withdrawFromBank(UUID uuid, double amount, Consumer<BankResult> callback) {
+    public void withdrawFromBank(UUID uuid, java.math.BigDecimal amount, Consumer<BankResult> callback) {
         accountService.getOrLoad(uuid, acc -> {
             var result = accountService.withdrawFromBank(uuid, amount);
             callback.accept(result.success()
@@ -148,7 +152,7 @@ public final class ScoltEconomyAPIImpl implements ScoltEconomyAPI {
     // -------------------------------------------------------
 
     @Override
-    public double getTreasuryBalance() {
+    public java.math.BigDecimal getTreasuryBalance() {
         return treasuryService.balance();
     }
 
@@ -163,8 +167,7 @@ public final class ScoltEconomyAPIImpl implements ScoltEconomyAPI {
                 e.displayName(),
                 e.interestMultiplier(),
                 e.taxMultiplier(),
-                eventManager.getRemainingSeconds()
-        ));
+                eventManager.getRemainingSeconds()));
     }
 
     // -------------------------------------------------------
@@ -177,14 +180,16 @@ public final class ScoltEconomyAPIImpl implements ScoltEconomyAPI {
     }
 
     @Override
-    public double getStockPrice(String stockId) {
-        if (stockMarketService == null) return 0.0;
+    public java.math.BigDecimal getStockPrice(String stockId) {
+        if (stockMarketService == null)
+            return java.math.BigDecimal.ZERO;
         return stockMarketService.currentPrice(stockId);
     }
 
     @Override
     public long getStockAvailableShares(String stockId) {
-        if (stockMarketService == null) return 0L;
+        if (stockMarketService == null)
+            return 0L;
         return stockMarketService.availableShares(stockId);
     }
 
@@ -197,7 +202,7 @@ public final class ScoltEconomyAPIImpl implements ScoltEconomyAPI {
         stockMarketService.getPortfolioAsync(uuid, holdings -> {
             Map<String, StockHoldingInfo> result = new LinkedHashMap<>();
             holdings.forEach((id, h) -> {
-                double cur = stockMarketService.currentPrice(id);
+                java.math.BigDecimal cur = stockMarketService.currentPrice(id);
                 result.put(id, new StockHoldingInfo(id, h.quantity(), h.avgPrice(), cur));
             });
             callback.accept(result);

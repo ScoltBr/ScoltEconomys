@@ -1,8 +1,10 @@
 package me.scoltbr.scoltEconomys.account;
 
+import java.math.BigDecimal;
+
 public record GlobalEconomyData(
-    double totalWallet,
-    double totalBank,
+    BigDecimal totalWallet,
+    BigDecimal totalBank,
     int totalAccounts,
-    double top10Wealth
+    BigDecimal top10Wealth
 ) {}

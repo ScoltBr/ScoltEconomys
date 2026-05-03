@@ -4,6 +4,7 @@ import me.scoltbr.scoltEconomys.account.AccountService;
 import me.scoltbr.scoltEconomys.account.TreasuryService;
 import me.scoltbr.scoltEconomys.audit.TransactionAuditService;
 import me.scoltbr.scoltEconomys.stats.AdminStatsService;
+import me.scoltbr.scoltEconomys.util.MessageUtils;
 import me.scoltbr.scoltEconomys.util.MoneyFormat;
 import me.scoltbr.scoltEconomys.util.MoneyParser;
 import org.bukkit.Bukkit;
@@ -73,11 +74,11 @@ public final class EcoAdminCommand implements CommandExecutor {
     // ----------------------------
     private boolean handleAdmin(CommandSender sender) {
         if (!sender.hasPermission("scolteconomy.admin")) {
-            sender.sendMessage("§cSem permissão.");
+            MessageUtils.sendError(sender, "Sem permissão.");
             return true;
         }
         if (!(sender instanceof Player p)) {
-            sender.sendMessage("§cApenas jogadores podem abrir o painel.");
+            MessageUtils.sendError(sender, "Apenas jogadores podem abrir o painel.");
             return true;
         }
 
@@ -87,50 +88,51 @@ public final class EcoAdminCommand implements CommandExecutor {
 
     private boolean handleAlerts(CommandSender sender) {
         if (!sender.hasPermission("scolteconomy.admin")) {
-            sender.sendMessage("§cSem permissão.");
+            MessageUtils.sendError(sender, "Sem permissão.");
             return true;
         }
-        sender.sendMessage("§6§lAlertas Econômicos");
+        MessageUtils.send(sender, "<gold><bold>Alertas Econômicos</bold></gold>");
         var list = alerts.activeAlerts();
         if (list.isEmpty()) {
-            sender.sendMessage("§aNenhum alerta ativo.");
+            MessageUtils.send(sender, "<green>Nenhum alerta ativo.</green>");
             return true;
         }
         for (var a : list) {
-            sender.sendMessage("§c- §f" + a.message());
+            MessageUtils.send(sender, "<red>⚠ </red><white>" + a.message() + "</white>");
         }
         return true;
     }
 
     private boolean handleTreasury(CommandSender sender) {
         if (!sender.hasPermission("scolteconomy.admin")) {
-            sender.sendMessage("§cSem permissão.");
+            MessageUtils.sendError(sender, "Sem permissão.");
             return true;
         }
-        sender.sendMessage("§6Tesouro: §f" + MoneyFormat.format(treasury.balance()));
+        MessageUtils.send(sender, "<gold>Tesouro do Servidor:</gold> <white>$ <bold>" + MoneyFormat.format(treasury.balance()) + "</bold></white>");
         return true;
     }
 
     private boolean handleBalance(CommandSender sender, String[] args) {
         if (!sender.hasPermission("scolteconomy.admin")) {
-            sender.sendMessage("§cSem permissão.");
+            MessageUtils.sendError(sender, "Sem permissão.");
             return true;
         }
         if (args.length < 2) {
-            sender.sendMessage("§cUso: /eco balance <player>");
+            MessageUtils.sendError(sender, "Uso: /eco balance \\<player\\>");
             return true;
         }
 
         Player target = Bukkit.getPlayerExact(args[1]);
         if (target == null) {
-            sender.sendMessage("§cJogador não encontrado ou offline.");
+            MessageUtils.sendError(sender, "Jogador não encontrado ou offline.");
             return true;
         }
 
         accounts.getOrLoad(target.getUniqueId(), acc -> {
-            sender.sendMessage("§6§lSaldo de §f" + target.getName());
-            sender.sendMessage("§aCarteira: §f" + MoneyFormat.format(acc.wallet()));
-            sender.sendMessage("§aBanco: §f" + MoneyFormat.format(acc.bank()));
+            MessageUtils.send(sender, "<gold><bold>Saldo de</bold></gold> <white>" + target.getName() + "</white>");
+            MessageUtils.send(sender, " <gray>•</gray> Carteira: <green>$ <bold>" + MoneyFormat.format(acc.wallet()) + "</bold></green>");
+            MessageUtils.send(sender, " <gray>•</gray> Banco: <aqua>$ <bold>" + MoneyFormat.format(acc.bank()) + "</bold></aqua>");
+            MessageUtils.send(sender, " <gray>•</gray> Total: <yellow>$ <bold>" + MoneyFormat.format(acc.wallet().add(acc.bank())) + "</bold></yellow>");
         });
 
         return true;
@@ -142,34 +144,34 @@ public final class EcoAdminCommand implements CommandExecutor {
     private boolean handleGive(CommandSender sender, String[] args) {
         // /eco give <player> <amount>
         if (!sender.hasPermission("scolteconomy.admin")) {
-            sender.sendMessage("§cSem permissão.");
+            MessageUtils.sendError(sender, "Sem permissão.");
             return true;
         }
         if (args.length < 3) {
-            sender.sendMessage("§cUso: /eco give <player> <amount>");
+            MessageUtils.sendError(sender, "Uso: /eco give \\<player\\> \\<amount\\>");
             return true;
         }
 
         Player target = Bukkit.getPlayerExact(args[1]);
         if (target == null) {
-            sender.sendMessage("§cJogador não encontrado (por enquanto só online).");
+            MessageUtils.sendError(sender, "Jogador não encontrado (apenas online).");
             return true;
         }
 
-        double amount;
+        java.math.BigDecimal amount;
         try {
             amount = MoneyParser.parse(args[2]);
         } catch (Exception e) {
-            sender.sendMessage("§cValor inválido.");
+            MessageUtils.sendError(sender, "Valor inválido.");
             return true;
         }
 
         accounts.getOrLoad(target.getUniqueId(), acc -> {
             accounts.depositWallet(target.getUniqueId(), amount);
 
-            sender.sendMessage(
-                    "§aAdicionado §f" + MoneyFormat.format(amount) + "§a para §f" + target.getName() + "§a.");
-            target.sendMessage("§aVocê recebeu §f" + MoneyFormat.format(amount) + "§a (admin).");
+            MessageUtils.send(sender, "<green>✓ Adicionado <white>$ " + MoneyFormat.format(amount) + "</white> para <aqua>" + target.getName() + "</aqua>.</green>");
+            MessageUtils.send(target, "<green>✓ Você recebeu <white>$ " + MoneyFormat.format(amount) + "</white> <gray>(admin)</gray>.</green>");
+            MessageUtils.playSuccess(target);
 
             audit.recordAdminGive(sender.getName(), target.getUniqueId(), amount);
         });
@@ -180,25 +182,25 @@ public final class EcoAdminCommand implements CommandExecutor {
     private boolean handleTake(CommandSender sender, String[] args) {
         // /eco take <player> <amount>
         if (!sender.hasPermission("scolteconomy.admin")) {
-            sender.sendMessage("§cSem permissão.");
+            MessageUtils.sendError(sender, "Sem permissão.");
             return true;
         }
         if (args.length < 3) {
-            sender.sendMessage("§cUso: /eco take <player> <amount>");
+            MessageUtils.sendError(sender, "Uso: /eco take \\<player\\> \\<amount\\>");
             return true;
         }
 
         Player target = Bukkit.getPlayerExact(args[1]);
         if (target == null) {
-            sender.sendMessage("§cJogador não encontrado (por enquanto só online).");
+            MessageUtils.sendError(sender, "Jogador não encontrado (apenas online).");
             return true;
         }
 
-        double amount;
+        java.math.BigDecimal amount;
         try {
             amount = MoneyParser.parse(args[2]);
         } catch (Exception e) {
-            sender.sendMessage("§cValor inválido.");
+            MessageUtils.sendError(sender, "Valor inválido.");
             return true;
         }
 
@@ -206,12 +208,12 @@ public final class EcoAdminCommand implements CommandExecutor {
             boolean ok = accounts.withdrawWallet(target.getUniqueId(), amount);
 
             if (!ok) {
-                sender.sendMessage("§cO jogador não tem saldo suficiente.");
+                MessageUtils.sendError(sender, "O jogador não tem saldo suficiente.");
                 return;
             }
 
-            sender.sendMessage("§aRemovido §f" + MoneyFormat.format(amount) + "§a de §f" + target.getName() + "§a.");
-            target.sendMessage("§cForam removidos §f" + MoneyFormat.format(amount) + "§c (admin).");
+            MessageUtils.send(sender, "<green>✓ Removido <white>$ " + MoneyFormat.format(amount) + "</white> de <aqua>" + target.getName() + "</aqua>.</green>");
+            MessageUtils.send(target, "<red>✗ Foram removidos <white>$ " + MoneyFormat.format(amount) + "</white> <gray>(admin)</gray>.</red>");
 
             audit.recordAdminTake(sender.getName(), target.getUniqueId(), amount);
         });
@@ -222,34 +224,33 @@ public final class EcoAdminCommand implements CommandExecutor {
     private boolean handleSet(CommandSender sender, String[] args) {
         // /eco set <player> <amount>
         if (!sender.hasPermission("scolteconomy.admin")) {
-            sender.sendMessage("§cSem permissão.");
+            MessageUtils.sendError(sender, "Sem permissão.");
             return true;
         }
         if (args.length < 3) {
-            sender.sendMessage("§cUso: /eco set <player> <amount>");
+            MessageUtils.sendError(sender, "Uso: /eco set \\<player\\> \\<amount\\>");
             return true;
         }
 
         Player target = Bukkit.getPlayerExact(args[1]);
         if (target == null) {
-            sender.sendMessage("§cJogador não encontrado (por enquanto só online).");
+            MessageUtils.sendError(sender, "Jogador não encontrado (apenas online).");
             return true;
         }
 
-        double amount;
+        java.math.BigDecimal amount;
         try {
             amount = MoneyParser.parse(args[2]);
         } catch (Exception e) {
-            sender.sendMessage("§cValor inválido.");
+            MessageUtils.sendError(sender, "Valor inválido.");
             return true;
         }
 
         accounts.getOrLoad(target.getUniqueId(), acc -> {
             accounts.setWallet(target.getUniqueId(), amount);
 
-            sender.sendMessage(
-                    "§aWallet de §f" + target.getName() + "§a agora é §f" + MoneyFormat.format(amount) + "§a.");
-            target.sendMessage("§eSeu saldo foi ajustado para §f" + MoneyFormat.format(amount) + "§e (admin).");
+            MessageUtils.send(sender, "<green>✓ Carteira de <aqua>" + target.getName() + "</aqua> definida para <white>$ " + MoneyFormat.format(amount) + "</white>.</green>");
+            MessageUtils.send(target, "<yellow>Seu saldo foi ajustado para <white>$ " + MoneyFormat.format(amount) + "</white> <gray>(admin)</gray>.</yellow>");
 
             audit.recordAdminSet(sender.getName(), target.getUniqueId(), amount);
         });
@@ -258,13 +259,13 @@ public final class EcoAdminCommand implements CommandExecutor {
     }
 
     private void sendHelp(CommandSender sender) {
-        sender.sendMessage("§6§lScoltEconomy");
-        sender.sendMessage("§7/eco admin §f- abre o painel");
-        sender.sendMessage("§7/eco alerts §f- lista alertas");
-        sender.sendMessage("§7/eco treasury §f- ver tesouro");
-        sender.sendMessage("§7/eco give <player> <amount>");
-        sender.sendMessage("§7/eco take <player> <amount>");
-        sender.sendMessage("§7/eco set <player> <amount>");
-        sender.sendMessage("§7/eco balance <player> §f- ver saldo");
+        MessageUtils.send(sender, "<gold><bold>ScoltEconomy — Admin</bold></gold>");
+        MessageUtils.send(sender, " <gray>•</gray> <yellow>/eco admin</yellow>            <gray>- Abre o painel administrativo</gray>");
+        MessageUtils.send(sender, " <gray>•</gray> <yellow>/eco alerts</yellow>           <gray>- Lista alertas econômicos ativos</gray>");
+        MessageUtils.send(sender, " <gray>•</gray> <yellow>/eco treasury</yellow>         <gray>- Ver saldo do Tesouro</gray>");
+        MessageUtils.send(sender, " <gray>•</gray> <yellow>/eco balance \\<player\\></yellow> <gray>- Ver saldo de um jogador</gray>");
+        MessageUtils.send(sender, " <gray>•</gray> <yellow>/eco give \\<player\\> \\<val\\></yellow> <gray>- Dar dinheiro</gray>");
+        MessageUtils.send(sender, " <gray>•</gray> <yellow>/eco take \\<player\\> \\<val\\></yellow> <gray>- Remover dinheiro</gray>");
+        MessageUtils.send(sender, " <gray>•</gray> <yellow>/eco set \\<player\\> \\<val\\></yellow>  <gray>- Definir carteira</gray>");
     }
 }

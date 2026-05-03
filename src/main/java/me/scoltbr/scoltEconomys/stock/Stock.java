@@ -15,8 +15,8 @@ public record Stock(
         String id,
         String displayName,
         String sector,
-        double initialPrice,
+        java.math.BigDecimal initialPrice,
         double volatility,
         long totalShares,
-        double brokerageFee
+        java.math.BigDecimal brokerageFee
 ) {}

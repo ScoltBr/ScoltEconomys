@@ -49,26 +49,29 @@ public final class TaxManager {
         policies.put(TaxType.WITHDRAW, new TaxPolicy(enabled, rate, minFee, maxFee));
     }
 
-    public TaxResult apply(TaxType type, double grossAmount) {
+    public TaxResult apply(TaxType type, java.math.BigDecimal grossAmount) {
         TaxPolicy policy = policies.get(type);
-        if (policy == null || !policy.enabled() || grossAmount <= 0) {
-            return new TaxResult(grossAmount, 0.0);
+        if (policy == null || !policy.enabled() || grossAmount.compareTo(java.math.BigDecimal.ZERO) <= 0) {
+            return new TaxResult(grossAmount, java.math.BigDecimal.ZERO);
         }
 
-        double fee = grossAmount * policy.rate();
+        java.math.BigDecimal fee = grossAmount.multiply(java.math.BigDecimal.valueOf(policy.rate()));
         
         // Aplica multiplicador do evento ativo
         if (eventManager != null) {
-            fee *= eventManager.getTaxMultiplier();
+            fee = fee.multiply(java.math.BigDecimal.valueOf(eventManager.getTaxMultiplier()));
         }
         
-        fee = Math.max(policy.minFee(), Math.min(policy.maxFee(), fee));
+        java.math.BigDecimal minFee = java.math.BigDecimal.valueOf(policy.minFee());
+        java.math.BigDecimal maxFee = java.math.BigDecimal.valueOf(policy.maxFee());
+        
+        fee = fee.max(minFee).min(maxFee);
 
-        if (fee > grossAmount) fee = grossAmount;
+        if (fee.compareTo(grossAmount) > 0) fee = grossAmount;
 
-        double net = grossAmount - fee;
+        java.math.BigDecimal net = grossAmount.subtract(fee);
 
-        return new TaxResult(net, fee);
+        return new TaxResult(net.setScale(2, java.math.RoundingMode.HALF_UP), fee.setScale(2, java.math.RoundingMode.HALF_UP));
     }
 
     public TaxPolicy policy(TaxType type) {

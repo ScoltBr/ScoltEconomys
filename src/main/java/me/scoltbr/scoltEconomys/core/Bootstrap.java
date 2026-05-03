@@ -12,6 +12,7 @@ import me.scoltbr.scoltEconomys.command.EcoAdminTabCompleter;
 import me.scoltbr.scoltEconomys.command.MoneyCommand;
 import me.scoltbr.scoltEconomys.command.MoneyCommandTabCompleter;
 import me.scoltbr.scoltEconomys.command.PayAliasCommand;
+import me.scoltbr.scoltEconomys.command.PayCommand;
 import me.scoltbr.scoltEconomys.database.DatabaseManager;
 import me.scoltbr.scoltEconomys.database.Migrations;
 import me.scoltbr.scoltEconomys.scheduler.AsyncExecutor;
@@ -22,6 +23,10 @@ import me.scoltbr.scoltEconomys.stats.MoneyTopService;
 import me.scoltbr.scoltEconomys.stats.StatsTickService;
 import me.scoltbr.scoltEconomys.api.ScoltEconomyAPI;
 import me.scoltbr.scoltEconomys.api.ScoltEconomyAPIImpl;
+import me.scoltbr.scoltEconomys.commodity.CommodityMarketCommand;
+import me.scoltbr.scoltEconomys.commodity.CommodityMarketService;
+import me.scoltbr.scoltEconomys.commodity.CommodityMarketTabCompleter;
+import me.scoltbr.scoltEconomys.commodity.CommodityRepositorySql;
 import me.scoltbr.scoltEconomys.stock.StockMarketCommand;
 import me.scoltbr.scoltEconomys.stock.StockMarketService;
 import me.scoltbr.scoltEconomys.stock.StockMarketTabCompleter;
@@ -63,8 +68,11 @@ public final class Bootstrap {
     // stock market
     private StockRepositorySql stockRepository;
     private StockMarketService stockMarketService;
-    private StockPriceTicker   stockPriceTicker;
-    private StockMenuService   stockMenuService;
+    private StockPriceTicker stockPriceTicker;
+    private StockMenuService stockMenuService;
+
+    // commodity market
+    private CommodityMarketService commodityMarketService;
 
     // API pública
     private ScoltEconomyAPIImpl publicApi;
@@ -87,7 +95,6 @@ public final class Bootstrap {
         this.accountRepository = new AccountRepositorySql(databaseManager.dataSource());
         this.moneyTopService = new MoneyTopService(plugin, asyncExecutor, accountRepository);
 
-
         // 4) Services core
         this.treasuryService = new TreasuryService(plugin, databaseManager.dataSource());
         this.treasuryService.start();
@@ -103,8 +110,7 @@ public final class Bootstrap {
                 accountRepository,
                 taxManager,
                 treasuryService,
-                auditService
-        );
+                auditService);
 
         this.accountFlushService = new AccountFlushService(plugin, asyncExecutor, accountCache, accountRepository);
 
@@ -119,15 +125,26 @@ public final class Bootstrap {
         this.statsTickService = new StatsTickService(plugin, adminStatsService, alertService);
 
         // 6.5) Admin GUI (AGORA sim, stats/alerts já existem)
-        this.adminMenuService = new AdminMenuService(plugin, asyncExecutor, adminStatsService, alertService, taxManager);
+        this.adminMenuService = new AdminMenuService(plugin, asyncExecutor, adminStatsService, alertService,
+                taxManager);
 
         // 7) Stock Market
         if (plugin.getConfig().getBoolean("stock-market.enabled", false)) {
-            this.stockRepository     = new StockRepositorySql(databaseManager.dataSource());
-            this.stockMarketService  = new StockMarketService(plugin, asyncExecutor, stockRepository, accountService, treasuryService, eventManager);
+            this.stockRepository = new StockRepositorySql(databaseManager.dataSource());
+            this.stockMarketService = new StockMarketService(plugin, asyncExecutor, stockRepository, accountService,
+                    treasuryService, eventManager);
             this.stockMarketService.loadInitialState();
-            this.stockPriceTicker    = new StockPriceTicker(stockMarketService);
-            this.stockMenuService    = new StockMenuService(plugin, stockMarketService);
+            this.stockPriceTicker = new StockPriceTicker(stockMarketService);
+            this.stockMenuService = new StockMenuService(plugin, stockMarketService, accountService);
+        }
+
+        // 7.5) Commodity Market
+        if (plugin.getConfig().getBoolean("commodity-market.enabled", false)) {
+            this.commodityMarketService = new CommodityMarketService(
+                    plugin, asyncExecutor,
+                    new CommodityRepositorySql(databaseManager.dataSource()),
+                    accountService, treasuryService, eventManager);
+            this.commodityMarketService.loadInitialState();
         }
 
         // 8) API Pública — registra no ServicesManager para outros plugins
@@ -137,14 +154,13 @@ public final class Bootstrap {
                 accountService,
                 treasuryService,
                 eventManager,
-                stockMarketService  // null-safe: pode ser null se stock-market.enabled=false
+                stockMarketService // null-safe: pode ser null se stock-market.enabled=false
         );
         plugin.getServer().getServicesManager().register(
                 ScoltEconomyAPI.class,
                 publicApi,
                 plugin,
-                org.bukkit.plugin.ServicePriority.Normal
-        );
+                org.bukkit.plugin.ServicePriority.Normal);
         plugin.getLogger().info("[API] ScoltEconomyAPI v" + publicApi.apiVersion() + " registrada.");
 
         // 9) App layer
@@ -172,8 +188,7 @@ public final class Bootstrap {
             tasks.runRepeatingAsync(
                     () -> bankInterestService.tick(),
                     interestTicks,
-                    interestTicks
-            );
+                    interestTicks);
         }
 
         // stats + alertas
@@ -181,26 +196,23 @@ public final class Bootstrap {
             tasks.runRepeatingAsync(
                     () -> statsTickService.tick(),
                     statsTicks,
-                    statsTicks
-            );
+                    statsTicks);
         }
 
         // eventos automáticos
-        if (plugin.getConfig().getBoolean("events.enabled", true) && 
-            plugin.getConfig().getBoolean("events.auto.enabled", true)) {
+        if (plugin.getConfig().getBoolean("events.enabled", true) &&
+                plugin.getConfig().getBoolean("events.auto.enabled", true)) {
             tasks.runRepeatingAsync(
                     () -> eventManager.checkAutoEvent(),
                     autoEventTicks,
-                    autoEventTicks
-            );
+                    autoEventTicks);
         }
 
         // feedback visual (ActionBar)
         tasks.runRepeatingSync(
                 () -> eventManager.tickActionBar(),
                 20L,
-                20L
-        );
+                20L);
 
         // stock market ticker
         if (stockPriceTicker != null) {
@@ -209,8 +221,17 @@ public final class Bootstrap {
             tasks.runRepeatingAsync(
                     stockPriceTicker::tick,
                     stockTicks,
-                    stockTicks
-            );
+                    stockTicks);
+        }
+
+        // commodity market ticker
+        if (commodityMarketService != null) {
+            int commTickInterval = plugin.getConfig().getInt("commodity-market.tick-interval-seconds", 180);
+            long commTicks = 20L * commTickInterval;
+            tasks.runRepeatingAsync(
+                    commodityMarketService::tick,
+                    commTicks,
+                    commTicks);
         }
 
         // flush
@@ -218,15 +239,15 @@ public final class Bootstrap {
                 accountFlushService::flushDirtyBatch,
                 flushTicks,
                 flushTicks,
-                maxPerFlush
-        );
+                maxPerFlush);
     }
 
     private void registerCommands() {
-        register("pay", new PayAliasCommand());
+        register("pay", new PayCommand(accountService));
         register("money", new MoneyCommand(accountService, moneyTopService, adminMenuService, eventManager));
         var moneyCmd = plugin.getCommand("money");
-        if (moneyCmd != null) moneyCmd.setTabCompleter(new MoneyCommandTabCompleter());
+        if (moneyCmd != null)
+            moneyCmd.setTabCompleter(new MoneyCommandTabCompleter());
 
         // EcoCommand deve tratar /eco admin etc.
         register("eco", new EcoAdminCommand(
@@ -236,35 +257,41 @@ public final class Bootstrap {
                 treasuryService,
                 adminStatsService,
                 alertService,
-                adminMenuService
-        ));
+                adminMenuService));
         var ecoCmd = plugin.getCommand("eco");
-        if (ecoCmd != null) ecoCmd.setTabCompleter(new EcoAdminTabCompleter());
+        if (ecoCmd != null)
+            ecoCmd.setTabCompleter(new EcoAdminTabCompleter());
 
         // Stock market command — só registra se o módulo estiver ativo
         if (stockMarketService != null) {
             register("bolsa", new StockMarketCommand(stockMarketService, stockMenuService));
             var bolsaCmd = plugin.getCommand("bolsa");
-            if (bolsaCmd != null) bolsaCmd.setTabCompleter(new StockMarketTabCompleter(stockMarketService));
+            if (bolsaCmd != null)
+                bolsaCmd.setTabCompleter(new StockMarketTabCompleter(stockMarketService));
+        }
+
+        // Commodity market command — só registra se o módulo estiver ativo
+        if (commodityMarketService != null) {
+            register("commodities", new CommodityMarketCommand(commodityMarketService));
+            var commCmd = plugin.getCommand("commodities");
+            if (commCmd != null)
+                commCmd.setTabCompleter(new CommodityMarketTabCompleter(commodityMarketService));
         }
     }
 
     private void registerListeners() {
         plugin.getServer().getPluginManager().registerEvents(
                 new PlayerLifecycleListener(accountService, accountFlushService, accountRepository, asyncExecutor),
-                plugin
-        );
+                plugin);
 
         plugin.getServer().getPluginManager().registerEvents(
                 new AdminMenuListener(adminMenuService),
-                plugin
-        );
+                plugin);
 
         if (stockMarketService != null) {
             plugin.getServer().getPluginManager().registerEvents(
                     new StockMenuListener(plugin, stockMarketService, stockMenuService),
-                    plugin
-            );
+                    plugin);
         }
     }
 
@@ -289,17 +316,33 @@ public final class Bootstrap {
                 net.milkbowl.vault.economy.Economy.class,
                 provider,
                 plugin,
-                org.bukkit.plugin.ServicePriority.Highest
-        );
+                org.bukkit.plugin.ServicePriority.Highest);
 
         plugin.getLogger().info("[Vault] Economy provider registrado com sucesso.");
     }
 
     // Getters pro shutdown
-    public AccountFlushService accountFlushService() { return accountFlushService; }
-    public AsyncExecutor asyncExecutor() { return asyncExecutor; }
-    public Tasks tasks() { return tasks; }
-    public DatabaseManager databaseManager() { return databaseManager; }
-    public TransactionAuditService auditService() { return auditService; }
-    public TreasuryService treasuryService() { return treasuryService; }
+    public AccountFlushService accountFlushService() {
+        return accountFlushService;
+    }
+
+    public AsyncExecutor asyncExecutor() {
+        return asyncExecutor;
+    }
+
+    public Tasks tasks() {
+        return tasks;
+    }
+
+    public DatabaseManager databaseManager() {
+        return databaseManager;
+    }
+
+    public TransactionAuditService auditService() {
+        return auditService;
+    }
+
+    public TreasuryService treasuryService() {
+        return treasuryService;
+    }
 }

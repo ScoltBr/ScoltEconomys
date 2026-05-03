@@ -40,12 +40,12 @@ public final class AccountService {
     private final java.util.concurrent.ConcurrentHashMap<UUID, java.util.List<Consumer<PlayerAccount>>> pendingLoads;
 
     public AccountService(Plugin plugin,
-                          AsyncExecutor async,
-                          AccountCache cache,
-                          AccountRepository repo,
-                          TaxManager taxManager,
-                          TreasuryService treasury,
-                          TransactionAuditService audit) {
+            AsyncExecutor async,
+            AccountCache cache,
+            AccountRepository repo,
+            TaxManager taxManager,
+            TreasuryService treasury,
+            TransactionAuditService audit) {
         this.plugin = plugin;
         this.async = async;
         this.cache = cache;
@@ -92,10 +92,9 @@ public final class AccountService {
                 PlayerAccount loaded = repo.load(uuid)
                         .orElseGet(() -> new PlayerAccount(
                                 uuid,
-                                plugin.getConfig().getDouble("defaults.wallet", 0.0),
-                                plugin.getConfig().getDouble("defaults.bank", 0.0),
-                                Instant.now()
-                        ));
+                                java.math.BigDecimal.valueOf(plugin.getConfig().getDouble("defaults.wallet", 0.0)),
+                                java.math.BigDecimal.valueOf(plugin.getConfig().getDouble("defaults.bank", 0.0)),
+                                Instant.now()));
 
                 cache.put(loaded);
 
@@ -119,17 +118,20 @@ public final class AccountService {
 
     /**
      * Deposita uma quantia na carteira (wallet) de um jogador.
-     * <p>Esta operação é síncrona e exige que o jogador esteja em cache.</p>
+     * <p>
+     * Esta operação é síncrona e exige que o jogador esteja em cache.
+     * </p>
      *
      * @param uuid   UUID do jogador.
      * @param amount Quantia positiva a depositar.
      */
-    public void depositWallet(UUID uuid, double amount) {
-        Preconditions.positive(amount, "amount");
+    public void depositWallet(UUID uuid, java.math.BigDecimal amount) {
+        if (amount.compareTo(java.math.BigDecimal.ZERO) <= 0)
+            throw new IllegalArgumentException("amount must be positive");
         withLock(uuid, () -> {
             PlayerAccount acc = requireCached(uuid);
-            double old = acc.wallet();
-            AccountBalanceChangeEvent event = fireBalanceChange(uuid, old, old + amount, BalanceType.WALLET);
+            java.math.BigDecimal old = acc.wallet();
+            AccountBalanceChangeEvent event = fireBalanceChange(uuid, old, old.add(amount), BalanceType.WALLET);
             if (!event.isCancelled()) {
                 acc.setWallet(event.getNewBalance());
                 cache.markDirty(uuid);
@@ -142,15 +144,18 @@ public final class AccountService {
      *
      * @param uuid   UUID do jogador.
      * @param amount Quantia positiva a retirar.
-     * @return true se a retirada foi concluída, false se saldo insuficiente ou cancelada.
+     * @return true se a retirada foi concluída, false se saldo insuficiente ou
+     *         cancelada.
      */
-    public boolean withdrawWallet(UUID uuid, double amount) {
-        Preconditions.positive(amount, "amount");
+    public boolean withdrawWallet(UUID uuid, java.math.BigDecimal amount) {
+        if (amount.compareTo(java.math.BigDecimal.ZERO) <= 0)
+            throw new IllegalArgumentException("amount must be positive");
         return withLockResult(uuid, () -> {
             PlayerAccount acc = requireCached(uuid);
-            if (acc.wallet() < amount) return false;
-            double old = acc.wallet();
-            AccountBalanceChangeEvent event = fireBalanceChange(uuid, old, old - amount, BalanceType.WALLET);
+            if (acc.wallet().compareTo(amount) < 0)
+                return false;
+            java.math.BigDecimal old = acc.wallet();
+            AccountBalanceChangeEvent event = fireBalanceChange(uuid, old, old.subtract(amount), BalanceType.WALLET);
             if (!event.isCancelled()) {
                 acc.setWallet(event.getNewBalance());
                 cache.markDirty(uuid);
@@ -166,11 +171,12 @@ public final class AccountService {
      * @param uuid  UUID do jogador.
      * @param value Novo saldo.
      */
-    public void setWallet(UUID uuid, double value) {
-        Preconditions.notNegative(value, "value");
+    public void setWallet(UUID uuid, java.math.BigDecimal value) {
+        if (value.compareTo(java.math.BigDecimal.ZERO) < 0)
+            throw new IllegalArgumentException("value must not be negative");
         withLock(uuid, () -> {
             PlayerAccount acc = requireCached(uuid);
-            double old = acc.wallet();
+            java.math.BigDecimal old = acc.wallet();
             AccountBalanceChangeEvent event = fireBalanceChange(uuid, old, value, BalanceType.WALLET);
             if (!event.isCancelled()) {
                 acc.setWallet(event.getNewBalance());
@@ -180,16 +186,19 @@ public final class AccountService {
     }
 
     /**
-     * Transfere valores entre dois jogadores, aplicando impostos e disparando eventos.
+     * Transfere valores entre dois jogadores, aplicando impostos e disparando
+     * eventos.
      *
      * @param from        UUID do remetente.
      * @param to          UUID do destinatário.
      * @param grossAmount Valor bruto enviado pelo remetente.
      * @return Resultado detalhado da transferência.
      */
-    public TransferResult transferWallet(UUID from, UUID to, double grossAmount) {
-        Preconditions.positive(grossAmount, "grossAmount");
-        if (from.equals(to)) return TransferResult.fail("same-account");
+    public TransferResult transferWallet(UUID from, UUID to, java.math.BigDecimal grossAmount) {
+        if (grossAmount.compareTo(java.math.BigDecimal.ZERO) <= 0)
+            throw new IllegalArgumentException("grossAmount must be positive");
+        if (from.equals(to))
+            return TransferResult.fail("same-account");
 
         return withLocks(from, to, () -> {
             PlayerAccount fromAcc = requireCached(from);
@@ -197,17 +206,19 @@ public final class AccountService {
 
             TaxResult tax = taxManager.apply(TaxType.TRANSFER, grossAmount);
 
-            if (fromAcc.wallet() < grossAmount) {
+            if (fromAcc.wallet().compareTo(grossAmount) < 0) {
                 return TransferResult.fail("insufficient-funds");
             }
 
             // Fira evento for 'from'
-            AccountBalanceChangeEvent eFrom = fireBalanceChange(from, fromAcc.wallet(), fromAcc.wallet() - grossAmount, BalanceType.WALLET);
+            AccountBalanceChangeEvent eFrom = fireBalanceChange(from, fromAcc.wallet(),
+                    fromAcc.wallet().subtract(grossAmount), BalanceType.WALLET);
             if (eFrom.isCancelled()) {
                 return TransferResult.fail("cancelled-by-api");
             }
             // Fira evento for 'to'
-            AccountBalanceChangeEvent eTo = fireBalanceChange(to, toAcc.wallet(), toAcc.wallet() + tax.netAmount(), BalanceType.WALLET);
+            AccountBalanceChangeEvent eTo = fireBalanceChange(to, toAcc.wallet(), toAcc.wallet().add(tax.netAmount()),
+                    BalanceType.WALLET);
             if (eTo.isCancelled()) {
                 return TransferResult.fail("cancelled-by-api");
             }
@@ -228,20 +239,19 @@ public final class AccountService {
                     tax.netAmount(),
                     tax.feeAmount(),
                     "command",
-                    "money pay"
-            );
+                    "money pay");
 
             return TransferResult.ok(tax.netAmount(), tax.feeAmount());
         });
     }
 
-    public record TransferResult(boolean success, double net, double fee, String reason) {
-        public static TransferResult ok(double net, double fee) {
+    public record TransferResult(boolean success, java.math.BigDecimal net, java.math.BigDecimal fee, String reason) {
+        public static TransferResult ok(java.math.BigDecimal net, java.math.BigDecimal fee) {
             return new TransferResult(true, net, fee, null);
         }
 
         public static TransferResult fail(String reason) {
-            return new TransferResult(false, 0.0, 0.0, reason);
+            return new TransferResult(false, java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO, reason);
         }
     }
 
@@ -249,24 +259,32 @@ public final class AccountService {
     // Bank (wallet <-> bank)
     // ----------------------------
 
-    public MoveResult depositToBank(UUID uuid, double amount) {
-        Preconditions.positive(amount, "amount");
+    public MoveResult depositToBank(UUID uuid, java.math.BigDecimal amount) {
+        if (amount.compareTo(java.math.BigDecimal.ZERO) <= 0)
+            throw new IllegalArgumentException("amount must be positive");
 
         return withLockResult(uuid, () -> {
             PlayerAccount acc = requireCached(uuid);
 
-            if (acc.wallet() < amount) return MoveResult.fail("insufficient-wallet");
+            if (acc.wallet().compareTo(amount) < 0)
+                return MoveResult.fail("insufficient-wallet");
 
-            double maxBank = plugin.getConfig().getDouble("bank.max-balance", Double.MAX_VALUE);
-            if (acc.bank() + amount > maxBank) return MoveResult.fail("bank-limit");
+            java.math.BigDecimal maxBank = java.math.BigDecimal
+                    .valueOf(plugin.getConfig().getDouble("bank.max-balance", Double.MAX_VALUE));
+            if (acc.bank().add(amount).compareTo(maxBank) > 0)
+                return MoveResult.fail("bank-limit");
 
             // Evento Carteira (Saída)
-            AccountBalanceChangeEvent eWallet = fireBalanceChange(uuid, acc.wallet(), acc.wallet() - amount, BalanceType.WALLET);
-            if (eWallet.isCancelled()) return MoveResult.fail("cancelled-by-api");
-            
+            AccountBalanceChangeEvent eWallet = fireBalanceChange(uuid, acc.wallet(), acc.wallet().subtract(amount),
+                    BalanceType.WALLET);
+            if (eWallet.isCancelled())
+                return MoveResult.fail("cancelled-by-api");
+
             // Evento Banco (Entrada)
-            AccountBalanceChangeEvent eBank = fireBalanceChange(uuid, acc.bank(), acc.bank() + amount, BalanceType.BANK);
-            if (eBank.isCancelled()) return MoveResult.fail("cancelled-by-api");
+            AccountBalanceChangeEvent eBank = fireBalanceChange(uuid, acc.bank(), acc.bank().add(amount),
+                    BalanceType.BANK);
+            if (eBank.isCancelled())
+                return MoveResult.fail("cancelled-by-api");
 
             acc.setWallet(eWallet.getNewBalance());
             acc.setBank(eBank.getNewBalance());
@@ -278,32 +296,37 @@ public final class AccountService {
                     null,
                     amount,
                     amount,
-                    0.0,
+                    java.math.BigDecimal.ZERO,
                     "command",
-                    "money deposit"
-            );
+                    "money deposit");
 
-            return MoveResult.ok(amount, 0.0);
+            return MoveResult.ok(amount, java.math.BigDecimal.ZERO);
         });
     }
 
-    public MoveResult withdrawFromBank(UUID uuid, double grossAmount) {
-        Preconditions.positive(grossAmount, "grossAmount");
+    public MoveResult withdrawFromBank(UUID uuid, java.math.BigDecimal grossAmount) {
+        if (grossAmount.compareTo(java.math.BigDecimal.ZERO) <= 0)
+            throw new IllegalArgumentException("grossAmount must be positive");
 
         return withLockResult(uuid, () -> {
             PlayerAccount acc = requireCached(uuid);
 
-            if (acc.bank() < grossAmount) return MoveResult.fail("insufficient-bank");
+            if (acc.bank().compareTo(grossAmount) < 0)
+                return MoveResult.fail("insufficient-bank");
 
             TaxResult tax = taxManager.apply(TaxType.WITHDRAW, grossAmount);
 
             // Evento Banco (Saída)
-            AccountBalanceChangeEvent eBank = fireBalanceChange(uuid, acc.bank(), acc.bank() - grossAmount, BalanceType.BANK);
-            if (eBank.isCancelled()) return MoveResult.fail("cancelled-by-api");
-                
+            AccountBalanceChangeEvent eBank = fireBalanceChange(uuid, acc.bank(), acc.bank().subtract(grossAmount),
+                    BalanceType.BANK);
+            if (eBank.isCancelled())
+                return MoveResult.fail("cancelled-by-api");
+
             // Evento Carteira (Entrada)
-            AccountBalanceChangeEvent eWallet = fireBalanceChange(uuid, acc.wallet(), acc.wallet() + tax.netAmount(), BalanceType.WALLET);
-            if (eWallet.isCancelled()) return MoveResult.fail("cancelled-by-api");
+            AccountBalanceChangeEvent eWallet = fireBalanceChange(uuid, acc.wallet(), acc.wallet().add(tax.netAmount()),
+                    BalanceType.WALLET);
+            if (eWallet.isCancelled())
+                return MoveResult.fail("cancelled-by-api");
 
             acc.setBank(eBank.getNewBalance());
             acc.setWallet(eWallet.getNewBalance());
@@ -319,16 +342,20 @@ public final class AccountService {
                     tax.netAmount(),
                     tax.feeAmount(),
                     "command",
-                    "money withdraw"
-            );
+                    "money withdraw");
 
             return MoveResult.ok(tax.netAmount(), tax.feeAmount());
         });
     }
 
-    public record MoveResult(boolean success, double net, double fee, String reason) {
-        public static MoveResult ok(double net, double fee) { return new MoveResult(true, net, fee, null); }
-        public static MoveResult fail(String reason) { return new MoveResult(false, 0.0, 0.0, reason); }
+    public record MoveResult(boolean success, java.math.BigDecimal net, java.math.BigDecimal fee, String reason) {
+        public static MoveResult ok(java.math.BigDecimal net, java.math.BigDecimal fee) {
+            return new MoveResult(true, net, fee, null);
+        }
+
+        public static MoveResult fail(String reason) {
+            return new MoveResult(false, java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO, reason);
+        }
     }
 
     // ----------------------------
@@ -379,7 +406,8 @@ public final class AccountService {
     // Internals
     // ----------------------------
 
-    private AccountBalanceChangeEvent fireBalanceChange(UUID uuid, double oldBal, double newBal, BalanceType type) {
+    private AccountBalanceChangeEvent fireBalanceChange(UUID uuid, java.math.BigDecimal oldBal,
+            java.math.BigDecimal newBal, BalanceType type) {
         AccountBalanceChangeEvent event = new AccountBalanceChangeEvent(uuid, oldBal, newBal, type);
         if (Bukkit.isPrimaryThread()) {
             Bukkit.getPluginManager().callEvent(event);
@@ -392,47 +420,55 @@ public final class AccountService {
                 return event;
             }).get();
         } catch (InterruptedException | ExecutionException e) {
-            plugin.getLogger().log(Level.SEVERE, "Failed to fire AccountBalanceChangeEvent synchronously from async thread for " + uuid, e);
+            plugin.getLogger().log(Level.SEVERE,
+                    "Failed to fire AccountBalanceChangeEvent synchronously from async thread for " + uuid, e);
             event.setCancelled(true);
             return event;
         }
     }
 
     private PlayerAccount requireCached(UUID uuid) {
-        return cache.get(uuid).orElseThrow(() ->
-                new IllegalStateException("Account not cached for uuid=" + uuid)
-        );
+        return cache.get(uuid).orElseThrow(() -> new IllegalStateException("Account not cached for uuid=" + uuid));
     }
 
-    public double applyBankInterest(UUID uuid, double rate, double capPerInterval) {
-        if (rate <= 0) return 0.0;
-        if (capPerInterval <= 0) return 0.0;
+    public java.math.BigDecimal applyBankInterest(UUID uuid, double rate, double capPerInterval) {
+        if (rate <= 0)
+            return java.math.BigDecimal.ZERO;
+        if (capPerInterval <= 0)
+            return java.math.BigDecimal.ZERO;
 
         return withLockResult(uuid, () -> {
             PlayerAccount acc = requireCached(uuid);
 
-            double bank = acc.bank();
-            if (bank <= 0) return 0.0;
+            java.math.BigDecimal bank = acc.bank();
+            if (bank.compareTo(java.math.BigDecimal.ZERO) <= 0)
+                return java.math.BigDecimal.ZERO;
 
-            double interest = bank * rate;
-            if (interest > capPerInterval) interest = capPerInterval;
+            java.math.BigDecimal interest = bank.multiply(java.math.BigDecimal.valueOf(rate)).setScale(2, java.math.RoundingMode.HALF_UP);
+            java.math.BigDecimal cap = java.math.BigDecimal.valueOf(capPerInterval);
+            if (interest.compareTo(cap) > 0)
+                interest = cap;
 
-            double maxBank = plugin.getConfig().getDouble("bank.max-balance", Double.MAX_VALUE);
-            double room = maxBank - bank;
-            if (room <= 0) return 0.0;
+            java.math.BigDecimal maxBank = java.math.BigDecimal
+                    .valueOf(plugin.getConfig().getDouble("bank.max-balance", Double.MAX_VALUE));
+            java.math.BigDecimal room = maxBank.subtract(bank);
+            if (room.compareTo(java.math.BigDecimal.ZERO) <= 0)
+                return java.math.BigDecimal.ZERO;
 
-            if (interest > room) interest = room;
-            if (interest <= 0) return 0.0;
+            if (interest.compareTo(room) > 0)
+                interest = room;
+            if (interest.compareTo(java.math.BigDecimal.ZERO) <= 0)
+                return java.math.BigDecimal.ZERO;
 
-            AccountBalanceChangeEvent event = fireBalanceChange(uuid, bank, bank + interest, BalanceType.BANK);
+            AccountBalanceChangeEvent event = fireBalanceChange(uuid, bank, bank.add(interest), BalanceType.BANK);
             if (event.isCancelled())
-                return 0.0;
+                return java.math.BigDecimal.ZERO;
 
             acc.setBank(event.getNewBalance());
             cache.markDirty(uuid);
-            
+
             // Re-calculate interest effectively applied (in case a listener changed it)
-            double effectivelyAdded = event.getNewBalance() - bank;
+            java.math.BigDecimal effectivelyAdded = event.getNewBalance().subtract(bank);
 
             audit.record(
                     TransactionType.BANK_INTEREST,
@@ -440,45 +476,44 @@ public final class AccountService {
                     uuid,
                     effectivelyAdded,
                     effectivelyAdded,
-                    0.0,
+                    java.math.BigDecimal.ZERO,
                     "scheduler",
-                    "bank interest"
-            );
+                    "bank interest");
 
             return effectivelyAdded;
         });
     }
 
-    public java.util.OptionalDouble peekWallet(UUID uuid) {
-        return cache.get(uuid).map(a -> java.util.OptionalDouble.of(a.wallet()))
-                .orElse(java.util.OptionalDouble.empty());
+    public Optional<java.math.BigDecimal> peekWallet(UUID uuid) {
+        return cache.get(uuid).map(a -> a.wallet());
     }
 
     // ----------------------------
     // Vault Sync API (Offline players)
     // ----------------------------
 
-    public double getWalletSync(UUID uuid) {
+    public java.math.BigDecimal getWalletSync(UUID uuid) {
         Optional<PlayerAccount> cached = cache.get(uuid);
         if (cached.isPresent()) {
             return cached.get().wallet();
         }
-        return repo.getWalletBalanceSync(uuid).orElse(0.0);
+        return repo.getWalletBalanceSync(uuid).orElse(java.math.BigDecimal.ZERO);
     }
 
-    public boolean addWalletSync(UUID uuid, double amount) {
+    public boolean addWalletSync(UUID uuid, java.math.BigDecimal amount) {
         // Amount could be negative for withdraw
         Optional<PlayerAccount> cached = cache.get(uuid);
         if (cached.isPresent()) {
             return withLockResult(uuid, () -> {
                 PlayerAccount acc = requireCached(uuid);
-                if (acc.wallet() + amount < 0) return false;
+                if (acc.wallet().add(amount).compareTo(java.math.BigDecimal.ZERO) < 0)
+                    return false;
                 acc.addWallet(amount);
                 cache.markDirty(uuid);
                 return true;
             });
         }
-        
+
         // Not in cache, update DB directly
         return repo.addWalletBalanceSync(uuid, amount);
     }
