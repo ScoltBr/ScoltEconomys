@@ -4,6 +4,7 @@ import me.scoltbr.scoltEconomys.account.AccountService;
 import me.scoltbr.scoltEconomys.account.TreasuryService;
 import me.scoltbr.scoltEconomys.event.EventManager;
 import me.scoltbr.scoltEconomys.scheduler.AsyncExecutor;
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
@@ -54,11 +55,23 @@ public final class CommodityMarketService {
     /** Preços correntes em memória, atualizados pelo ticker */
     private final ConcurrentHashMap<String, BigDecimal> currentPrices = new ConcurrentHashMap<>();
 
+    /** Cache de histórico curto para sparklines na GUI (últimos 10-15 preços) */
+    private final ConcurrentHashMap<String, List<BigDecimal>> sparklineCache = new ConcurrentHashMap<>();
+
+    /** Boosts temporários aplicados por eventos de notícias (Setor -> Boost) */
+    private final ConcurrentHashMap<String, Double> temporarySectorBoosts = new ConcurrentHashMap<>();
+
     /**
      * Volume de venda acumulado desde o último tick (em unidades de item).
      * Resetado a cada tick após ser consumido no cálculo de pressão.
      */
     private final ConcurrentHashMap<String, AtomicLong> sellVolume = new ConcurrentHashMap<>();
+
+    /**
+     * Volume de compra acumulado desde o último tick (em unidades de item).
+     * Resetado a cada tick após ser consumido no cálculo de pressão.
+     */
+    private final ConcurrentHashMap<String, AtomicLong> buyVolume = new ConcurrentHashMap<>();
 
     // Parâmetros globais lidos do config
     private double pressureFactor;
@@ -128,6 +141,7 @@ public final class CommodityMarketService {
             commodities.put(id, commodity);
             currentPrices.put(id, commodity.initialPrice());
             sellVolume.put(id, new AtomicLong(0));
+            buyVolume.put(id, new AtomicLong(0));
         }
 
         plugin.getLogger().info("[CommodityMarket] " + commodities.size() + " commodities carregadas.");
@@ -139,9 +153,15 @@ public final class CommodityMarketService {
      */
     public void loadInitialState() {
         for (Commodity c : commodities.values()) {
-            List<CommodityPrice> history = repo.getHistory(c.id(), 1);
+            List<CommodityPrice> history = repo.getHistory(c.id(), 15);
             if (!history.isEmpty()) {
-                currentPrices.put(c.id(), history.get(history.size() - 1).price());
+                currentPrices.put(c.id(), history.get(0).price());
+                
+                List<BigDecimal> spark = new ArrayList<>();
+                for (int i = history.size() - 1; i >= 0; i--) {
+                    spark.add(history.get(i).price());
+                }
+                sparklineCache.put(c.id(), spark);
             }
         }
     }
@@ -163,6 +183,18 @@ public final class CommodityMarketService {
         return currentPrices.getOrDefault(commodityId, BigDecimal.ZERO);
     }
 
+    public List<BigDecimal> getSparkline(String commodityId) {
+        return sparklineCache.getOrDefault(commodityId, Collections.emptyList());
+    }
+
+    /**
+     * Aplica um boost temporário de preço a um setor (usado pelo NewsService).
+     */
+    public void applyTemporarySectorBoost(String sector, double boost, long durationTicks) {
+        temporarySectorBoosts.put(sector, boost);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> temporarySectorBoosts.remove(sector), durationTicks);
+    }
+
     /**
      * Retorna a commodity cujo {@link Commodity#material()} corresponde ao material dado,
      * ou {@link Optional#empty()} se nenhuma corresponder.
@@ -174,47 +206,40 @@ public final class CommodityMarketService {
     }
 
     // -------------------------------------------------------
-    // Venda (MAIN THREAD — acessa inventário do jogador)
+    // Venda e Compra (MAIN THREAD — acessa inventário do jogador)
     // -------------------------------------------------------
 
     /**
      * Processa a venda de {@code requestedQty} unidades de {@code commodityId} pelo jogador.
-     *
-     * <p><b>Deve ser chamado na main thread</b>, pois acessa e modifica o inventário do jogador.</p>
-     *
-     * @param player       Jogador vendendo.
-     * @param commodityId  ID da commodity (chave do config).
-     * @param requestedQty Quantidade a vender; {@code -1} para vender tudo.
-     * @return Resultado detalhado da operação.
      */
-    public SellCommodityResult sell(Player player, String commodityId, int requestedQty) {
+    public CommodityTransactionResult sell(Player player, String commodityId, int requestedQty) {
         Commodity commodity = commodities.get(commodityId);
-        if (commodity == null) return SellCommodityResult.fail("unknown-commodity");
+        if (commodity == null) return CommodityTransactionResult.fail("unknown-commodity");
 
         // Conta quantos itens o jogador possui
         int available = countItems(player, commodity.material());
-        if (available <= 0) return SellCommodityResult.fail("no-items");
+        if (available <= 0) return CommodityTransactionResult.fail("no-items");
 
         // Resolve quantidade: -1 = tudo, respeitando o limite por transação
         int qty = (requestedQty == -1)
                 ? Math.min(available, commodity.maxPerTransaction())
                 : requestedQty;
 
-        if (qty <= 0) return SellCommodityResult.fail("invalid-quantity");
+        if (qty <= 0) return CommodityTransactionResult.fail("invalid-quantity");
         if (qty > commodity.maxPerTransaction())
-            return SellCommodityResult.fail("exceeds-limit-" + commodity.maxPerTransaction());
-        if (qty > available) return SellCommodityResult.fail("insufficient-items");
+            return CommodityTransactionResult.fail("exceeds-limit-" + commodity.maxPerTransaction());
+        if (qty > available) return CommodityTransactionResult.fail("insufficient-items");
 
         BigDecimal price = currentPrices.getOrDefault(commodityId, commodity.initialPrice());
         BigDecimal gross = price.multiply(BigDecimal.valueOf(qty)).setScale(2, RoundingMode.HALF_UP);
         BigDecimal fee   = gross.multiply(commodity.brokerageFee()).setScale(2, RoundingMode.HALF_UP);
         BigDecimal net   = gross.subtract(fee);
 
-        // Credita na carteira — AccountService exige conta em cache (jogador online → sempre em cache)
+        // Credita na carteira
         try {
             accountService.depositWallet(player.getUniqueId(), net);
         } catch (IllegalStateException e) {
-            return SellCommodityResult.fail("account-not-cached");
+            return CommodityTransactionResult.fail("account-not-cached");
         }
 
         // Remove os itens do inventário
@@ -228,14 +253,62 @@ public final class CommodityMarketService {
         // Registra pressão de venda para o próximo tick de preço
         sellVolume.computeIfAbsent(commodityId, k -> new AtomicLong(0)).addAndGet(qty);
 
-        // Persiste transação de forma assíncrona (não bloqueia a main thread)
+        // Persiste transação de forma assíncrona
         final BigDecimal finalPrice = price;
         final BigDecimal finalGross = gross;
         async.runAsync(() -> {
             repo.recordTransaction(player.getUniqueId(), commodityId, "SELL", qty, finalPrice, finalGross);
         });
 
-        return SellCommodityResult.ok(qty, net, fee, price);
+        return CommodityTransactionResult.ok(qty, net, fee, price);
+    }
+
+    /**
+     * Processa a compra física de {@code qty} unidades de {@code commodityId} pelo jogador.
+     */
+    public CommodityTransactionResult buyPhysical(Player player, String commodityId, int qty) {
+        Commodity commodity = commodities.get(commodityId);
+        if (commodity == null) return CommodityTransactionResult.fail("unknown-commodity");
+
+        if (qty <= 0) return CommodityTransactionResult.fail("invalid-quantity");
+        if (qty > commodity.maxPerTransaction())
+            return CommodityTransactionResult.fail("exceeds-limit-" + commodity.maxPerTransaction());
+
+        int freeSpace = getFreeSpace(player, commodity.material());
+        if (freeSpace < qty) return CommodityTransactionResult.fail("no-space");
+
+        BigDecimal price = currentPrices.getOrDefault(commodityId, commodity.initialPrice());
+        BigDecimal gross = price.multiply(BigDecimal.valueOf(qty)).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal fee   = gross.multiply(commodity.brokerageFee()).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal total = gross.add(fee);
+
+        try {
+            if (!accountService.withdrawWallet(player.getUniqueId(), total)) {
+                return CommodityTransactionResult.fail("insufficient-funds");
+            }
+        } catch (IllegalStateException e) {
+            return CommodityTransactionResult.fail("account-not-cached");
+        }
+
+        // Dá os itens
+        giveItems(player, commodity.material(), qty);
+
+        // Taxa para o Tesouro
+        if (fee.compareTo(BigDecimal.ZERO) > 0) {
+            treasury.collect(fee);
+        }
+
+        // Registra pressão de compra para o próximo tick de preço
+        buyVolume.computeIfAbsent(commodityId, k -> new AtomicLong(0)).addAndGet(qty);
+
+        // Persiste transação de forma assíncrona
+        final BigDecimal finalPrice = price;
+        final BigDecimal finalGross = gross;
+        async.runAsync(() -> {
+            repo.recordTransaction(player.getUniqueId(), commodityId, "BUY", qty, finalPrice, finalGross);
+        });
+
+        return CommodityTransactionResult.ok(qty, total, fee, price);
     }
 
     // -------------------------------------------------------
@@ -244,7 +317,7 @@ public final class CommodityMarketService {
 
     /**
      * Recalcula os preços de todas as commodities com base em:
-     * pressão de oferta acumulada, drift aleatório, mean-reversion e sector boost.
+     * pressão de oferta acumulada, pressão de demanda acumulada, drift aleatório, mean-reversion e sector boost.
      */
     public void tick() {
         ThreadLocalRandom rand = ThreadLocalRandom.current();
@@ -253,15 +326,18 @@ public final class CommodityMarketService {
             BigDecimal current = currentPrices.getOrDefault(commodity.id(), commodity.initialPrice());
             BigDecimal initial = commodity.initialPrice();
 
-            // 1. Pressão de oferta — quanto mais jogadores venderam, mais o preço cai
-            long sold  = sellVolume.computeIfAbsent(commodity.id(), k -> new AtomicLong(0)).getAndSet(0);
+            // 1. Pressão de oferta e demanda
+            long sold   = sellVolume.computeIfAbsent(commodity.id(), k -> new AtomicLong(0)).getAndSet(0);
+            long bought = buyVolume.computeIfAbsent(commodity.id(), k -> new AtomicLong(0)).getAndSet(0);
+            
             //    Normaliza por uma "base de referência" (ex: 100 itens = 1 unidade de pressão)
             double supplyPressure = -(sold / 100.0) * pressureFactor;
-            //    Clamp para evitar crash total em dump massivo: máximo -15% por tick
-            supplyPressure = Math.max(supplyPressure, -0.15);
+            double demandPressure = (bought / 100.0) * pressureFactor;
+            
+            //    Clamp para evitar crash total em dump/pump massivo: máximo ±15% por tick derivado de negociações
+            double marketPressure = Math.max(-0.15, Math.min(0.15, supplyPressure + demandPressure));
 
             // 2. Mean-reversion: o preço é puxado suavemente de volta ao preço inicial
-            //    Quando currentPrice > initial → drift negativo; quando < initial → positivo
             double reversionDrift = 0.0;
             if (initial.compareTo(BigDecimal.ZERO) > 0) {
                 double ratio = current.doubleValue() / initial.doubleValue();
@@ -271,13 +347,14 @@ public final class CommodityMarketService {
             // 3. Ruído aleatório (volatilidade da commodity)
             double noise = rand.nextGaussian() * commodity.volatility();
 
-            // 4. Boost do setor econômico do evento ativo
+            // 4. Boost do setor econômico do evento ativo + boost de notícias
             double sectorBoost = eventManager.getSectorBoost(commodity.sector());
+            double newsBoost   = temporarySectorBoosts.getOrDefault(commodity.sector(), 0.0);
 
             // 5. Calcula variação total e aplica
-            double changePct = supplyPressure + reversionDrift + noise + sectorBoost;
-            //    Limita variação máxima a ±20% por tick
-            changePct = Math.max(-0.20, Math.min(0.20, changePct));
+            double changePct = marketPressure + reversionDrift + noise + sectorBoost + newsBoost;
+            //    Limita variação máxima a ±25% por tick
+            changePct = Math.max(-0.25, Math.min(0.25, changePct));
 
             double minPrice = initial.doubleValue() * minPriceRatio;
             double maxPrice = initial.doubleValue() * maxPriceRatio;
@@ -285,6 +362,11 @@ public final class CommodityMarketService {
 
             BigDecimal newPrice = BigDecimal.valueOf(newRaw).setScale(2, RoundingMode.HALF_UP);
             currentPrices.put(commodity.id(), newPrice);
+
+            // Atualiza cache de sparkline
+            List<BigDecimal> spark = sparklineCache.computeIfAbsent(commodity.id(), k -> new ArrayList<>());
+            spark.add(newPrice);
+            if (spark.size() > 15) spark.remove(0);
 
             // Persiste snapshot de preço
             repo.savePrice(new CommodityPrice(commodity.id(), newPrice, System.currentTimeMillis()));
@@ -340,5 +422,37 @@ public final class CommodityMarketService {
             }
         }
         player.getInventory().setContents(contents);
+    }
+
+    /** Calcula quanto espaço livre o jogador tem para o material. */
+    private int getFreeSpace(Player player, Material material) {
+        int free = 0;
+        for (int i = 0; i < 36; i++) {
+            ItemStack stack = player.getInventory().getItem(i);
+            if (stack == null || stack.getType() == Material.AIR) {
+                free += material.getMaxStackSize();
+            } else if (stack.getType() == material) {
+                free += Math.max(0, material.getMaxStackSize() - stack.getAmount());
+            }
+        }
+        return free;
+    }
+
+    /** Dá {@code qty} itens ao jogador. Assume que há espaço suficiente. */
+    private void giveItems(Player player, Material material, int qty) {
+        int remaining = qty;
+        int maxStack = material.getMaxStackSize();
+        for (int i = 0; i < 36 && remaining > 0; i++) {
+            ItemStack stack = player.getInventory().getItem(i);
+            if (stack == null || stack.getType() == Material.AIR) {
+                int amount = Math.min(remaining, maxStack);
+                player.getInventory().setItem(i, new ItemStack(material, amount));
+                remaining -= amount;
+            } else if (stack.getType() == material && stack.getAmount() < maxStack) {
+                int add = Math.min(remaining, maxStack - stack.getAmount());
+                stack.setAmount(stack.getAmount() + add);
+                remaining -= add;
+            }
+        }
     }
 }

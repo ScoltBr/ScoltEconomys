@@ -11,6 +11,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
@@ -18,18 +19,8 @@ import org.bukkit.plugin.Plugin;
 
 /**
  * Listener que intercepta cliques nos menus do Mercado de Ações.
- *
- * Responsabilidades:
- * - Rotear navegação entre menus (MARKET ↔ COMPANY_DETAIL ↔ PORTFOLIO ↔ TOP_HOLDERS)
- * - Executar operações de compra/venda via StockMarketService
- * - Exibir feedback visual ao jogador (mensagens + sons)
  */
 public final class StockMenuListener implements Listener {
-
-    private static final NamespacedKey STOCK_ID_KEY =
-            new NamespacedKey("scolteconomys", "stock_id");
-    private static final NamespacedKey STOCK_ACTION_KEY =
-            new NamespacedKey("scolteconomys", "stock_action");
 
     private final Plugin plugin;
     private final StockMarketService stockService;
@@ -54,57 +45,64 @@ public final class StockMenuListener implements Listener {
         ItemMeta meta = clicked.getItemMeta();
         if (meta == null) return;
 
-        // Som de clique padrão
-        player.playSound(player.getLocation(), org.bukkit.Sound.UI_BUTTON_CLICK, 0.5f, 1.0f);
-
-        switch (holder.type()) {
-            case MARKET         -> handleMarketClick(player, clicked, meta);
-            case COMPANY_DETAIL -> handleDetailClick(player, clicked, meta, holder);
-            case PORTFOLIO      -> handlePortfolioClick(player, clicked, meta);
-            case TOP_HOLDERS    -> handleTopHoldersClick(player, clicked, meta, holder);
-        }
-    }
-
-    // -------------------------------------------------------
-    // MARKET
-    // -------------------------------------------------------
-
-    private void handleMarketClick(Player player, ItemStack item, ItemMeta meta) {
-        if (item.getType() == org.bukkit.Material.CHEST) {
-            menuService.openPortfolio(player);
-            return;
-        }
-        if (item.getType() == org.bukkit.Material.BARRIER) {
-            player.closeInventory();
+        // Verifica Ação embutida no botão
+        String rawAction = meta.getPersistentDataContainer().get(StockMenuService.STOCK_ACTION_KEY, PersistentDataType.STRING);
+        if (rawAction != null) {
+            handleAction(player, holder, rawAction);
             return;
         }
 
-        String stockId = meta.getPersistentDataContainer().get(STOCK_ID_KEY, PersistentDataType.STRING);
+        // Verifica Stock ID embutido no botão (para clicar em uma empresa na lista)
+        String stockId = meta.getPersistentDataContainer().get(StockMenuService.STOCK_ID_KEY, PersistentDataType.STRING);
         if (stockId != null) {
+            player.playSound(player.getLocation(), org.bukkit.Sound.UI_BUTTON_CLICK, 0.5f, 1.0f);
             menuService.openCompanyDetail(player, stockId);
         }
     }
 
-    // -------------------------------------------------------
-    // COMPANY DETAIL
-    // -------------------------------------------------------
-
-    private void handleDetailClick(Player player, ItemStack item, ItemMeta meta, StockMenuHolder holder) {
-        // Voltar para o mercado
-        if (item.getType() == org.bukkit.Material.ARROW) {
-            menuService.openMarket(player);
-            return;
+    @EventHandler
+    public void onInventoryClose(InventoryCloseEvent event) {
+        if (event.getInventory().getHolder() instanceof StockMenuHolder && event.getPlayer() instanceof Player player) {
+            menuService.cancelLiveRefresh(player);
         }
-        // Top acionistas
-        if (item.getType() == org.bukkit.Material.PLAYER_HEAD) {
-            menuService.openTopHolders(player, holder.stockId());
-            return;
+    }
+
+    private void handleAction(Player player, StockMenuHolder holder, String rawAction) {
+        player.playSound(player.getLocation(), org.bukkit.Sound.UI_BUTTON_CLICK, 0.5f, 1.0f);
+
+        // Ações de Navegação
+        switch (rawAction) {
+            case "CLOSE" -> {
+                player.closeInventory();
+                return;
+            }
+            case "BACK_TO_MARKET" -> {
+                menuService.openMarket(player, 1);
+                return;
+            }
+            case "BACK_TO_DETAIL" -> {
+                if (holder.stockId() != null) menuService.openCompanyDetail(player, holder.stockId());
+                return;
+            }
+            case "OPEN_PORTFOLIO" -> {
+                menuService.openPortfolio(player);
+                return;
+            }
+            case "OPEN_TOP" -> {
+                if (holder.stockId() != null) menuService.openTopHolders(player, holder.stockId());
+                return;
+            }
+            case "PAGE_NEXT" -> {
+                menuService.openMarket(player, holder.page() + 1);
+                return;
+            }
+            case "PAGE_PREV" -> {
+                menuService.openMarket(player, Math.max(1, holder.page() - 1));
+                return;
+            }
         }
 
-        // Verifica se é um botão de compra/venda via PDC
-        String rawAction = meta.getPersistentDataContainer().get(STOCK_ACTION_KEY, PersistentDataType.STRING);
-        if (rawAction == null) return;
-
+        // Ações Transacionais (BUY/SELL)
         // Formato: "ACTION:stockId:qty"
         String[] parts = rawAction.split(":");
         if (parts.length < 3) return;
@@ -121,7 +119,7 @@ public final class StockMenuListener implements Listener {
                     result -> onSellResult(player, result, stockId));
             case "SELL_ALL" -> {
                 if (qty <= 0) {
-                    player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_NOTE_BLOCK_BASS, 1.0f, 0.5f);
+                    player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_VILLAGER_NO, 1.0f, 1.0f);
                     MessageUtils.sendError(player, "Você não possui ações desta empresa.");
                     return;
                 }
@@ -131,38 +129,9 @@ public final class StockMenuListener implements Listener {
         }
     }
 
-    // -------------------------------------------------------
-    // PORTFOLIO
-    // -------------------------------------------------------
-
-    private void handlePortfolioClick(Player player, ItemStack item, ItemMeta meta) {
-        if (item.getType() == org.bukkit.Material.ARROW) {
-            menuService.openMarket(player);
-            return;
-        }
-        
-        String stockId = meta.getPersistentDataContainer().get(STOCK_ID_KEY, PersistentDataType.STRING);
-        if (stockId != null) {
-            menuService.openCompanyDetail(player, stockId);
-        }
-    }
-
-    // -------------------------------------------------------
-    // TOP HOLDERS
-    // -------------------------------------------------------
-
-    private void handleTopHoldersClick(Player player, ItemStack item, ItemMeta meta, StockMenuHolder holder) {
-        if (item.getType() == org.bukkit.Material.ARROW) {
-            menuService.openCompanyDetail(player, holder.stockId());
-        }
-    }
-
-    // -------------------------------------------------------
-    // Callbacks de resultado
-    // -------------------------------------------------------
-
     private void onBuyResult(Player player, BuyResult result, String stockId) {
         if (!result.success()) {
+            player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_VILLAGER_NO, 1.0f, 1.0f);
             String msg = switch (result.reason()) {
                 case "insufficient-funds"   -> "Saldo insuficiente na carteira.";
                 case "insufficient-supply"  -> "Ações insuficientes disponíveis no mercado.";
@@ -173,20 +142,25 @@ public final class StockMenuListener implements Listener {
             return;
         }
 
+        player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1.0f, 1.0f);
         MessageUtils.send(player,
                 "<green>✔ Você comprou <white>" + result.qty() + " ação(ões)</white> de " +
                 "<aqua>" + stockId + "</aqua> por <white>$" + MoneyFormat.format(result.totalPaid()) + "</white>.");
         if (result.fee().compareTo(java.math.BigDecimal.ZERO) > 0) {
             MessageUtils.send(player, "<gray>Corretagem paga: <yellow>$" + MoneyFormat.format(result.fee()));
         }
-        MessageUtils.playSuccess(player);
 
-        // Reabre o menu de detalhe com dados atualizados
-        Bukkit.getScheduler().runTaskLater(plugin, () -> menuService.openCompanyDetail(player, stockId), 5L);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (player.getOpenInventory().getTopInventory().getHolder() instanceof StockMenuHolder h 
+                && h.type() == StockMenuHolder.MenuType.COMPANY_DETAIL) {
+                menuService.openCompanyDetail(player, stockId); // refresh
+            }
+        }, 5L);
     }
 
     private void onSellResult(Player player, SellResult result, String stockId) {
         if (!result.success()) {
+            player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_VILLAGER_NO, 1.0f, 1.0f);
             String msg = switch (result.reason()) {
                 case "insufficient-holding" -> "Você não possui ações suficientes para vender.";
                 case "invalid-quantity"     -> "Quantidade inválida.";
@@ -196,6 +170,7 @@ public final class StockMenuListener implements Listener {
             return;
         }
 
+        player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1.0f, 1.0f);
         String profitColor = result.profit().compareTo(java.math.BigDecimal.ZERO) >= 0 ? "<green>" : "<red>";
         MessageUtils.send(player,
                 "<green>✔ Você vendeu <white>" + result.qty() + " ação(ões)</white> de " +
@@ -205,8 +180,12 @@ public final class StockMenuListener implements Listener {
         if (result.fee().compareTo(java.math.BigDecimal.ZERO) > 0) {
             MessageUtils.send(player, "<gray>Corretagem: <yellow>$" + MoneyFormat.format(result.fee()));
         }
-        MessageUtils.playSuccess(player);
 
-        Bukkit.getScheduler().runTaskLater(plugin, () -> menuService.openCompanyDetail(player, stockId), 5L);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (player.getOpenInventory().getTopInventory().getHolder() instanceof StockMenuHolder h 
+                && h.type() == StockMenuHolder.MenuType.COMPANY_DETAIL) {
+                menuService.openCompanyDetail(player, stockId); // refresh
+            }
+        }, 5L);
     }
 }

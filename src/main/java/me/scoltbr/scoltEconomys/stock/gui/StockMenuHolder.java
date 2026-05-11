@@ -15,14 +15,21 @@ public final class StockMenuHolder implements InventoryHolder {
 
     private final MenuType type;
     private final String stockId;  // null para MARKET e PORTFOLIO
+    private final int page;
 
-    public StockMenuHolder(MenuType type, String stockId) {
+    public StockMenuHolder(MenuType type, String stockId, int page) {
         this.type = type;
         this.stockId = stockId;
+        this.page = page;
+    }
+
+    public StockMenuHolder(MenuType type, String stockId) {
+        this(type, stockId, 1);
     }
 
     public MenuType type()    { return type; }
     public String  stockId()  { return stockId; }
+    public int     page()     { return page; }
 
     @Override
     public Inventory getInventory() { return null; }

@@ -27,6 +27,7 @@ import me.scoltbr.scoltEconomys.commodity.CommodityMarketCommand;
 import me.scoltbr.scoltEconomys.commodity.CommodityMarketService;
 import me.scoltbr.scoltEconomys.commodity.CommodityMarketTabCompleter;
 import me.scoltbr.scoltEconomys.commodity.CommodityRepositorySql;
+import me.scoltbr.scoltEconomys.commodity.NewsService;
 import me.scoltbr.scoltEconomys.stock.StockMarketCommand;
 import me.scoltbr.scoltEconomys.stock.StockMarketService;
 import me.scoltbr.scoltEconomys.stock.StockMarketTabCompleter;
@@ -35,6 +36,7 @@ import me.scoltbr.scoltEconomys.stock.StockRepositorySql;
 import me.scoltbr.scoltEconomys.stock.gui.StockMenuListener;
 import me.scoltbr.scoltEconomys.stock.gui.StockMenuService;
 import me.scoltbr.scoltEconomys.tax.TaxManager;
+import org.bukkit.Bukkit;
 import org.bukkit.command.CommandExecutor;
 
 public final class Bootstrap {
@@ -73,6 +75,8 @@ public final class Bootstrap {
 
     // commodity market
     private CommodityMarketService commodityMarketService;
+    private me.scoltbr.scoltEconomys.commodity.CommodityMenuService commodityMenuService;
+    private NewsService newsService;
 
     // API pública
     private ScoltEconomyAPIImpl publicApi;
@@ -145,6 +149,8 @@ public final class Bootstrap {
                     new CommodityRepositorySql(databaseManager.dataSource()),
                     accountService, treasuryService, eventManager);
             this.commodityMarketService.loadInitialState();
+            this.commodityMenuService = new me.scoltbr.scoltEconomys.commodity.CommodityMenuService(plugin, commodityMarketService);
+            this.newsService = new NewsService(plugin, commodityMarketService);
         }
 
         // 8) API Pública — registra no ServicesManager para outros plugins
@@ -272,7 +278,7 @@ public final class Bootstrap {
 
         // Commodity market command — só registra se o módulo estiver ativo
         if (commodityMarketService != null) {
-            register("commodities", new CommodityMarketCommand(commodityMarketService));
+            register("commodities", new CommodityMarketCommand(commodityMarketService, commodityMenuService));
             var commCmd = plugin.getCommand("commodities");
             if (commCmd != null)
                 commCmd.setTabCompleter(new CommodityMarketTabCompleter(commodityMarketService));
@@ -292,6 +298,18 @@ public final class Bootstrap {
             plugin.getServer().getPluginManager().registerEvents(
                     new StockMenuListener(plugin, stockMarketService, stockMenuService),
                     plugin);
+        }
+
+        if (commodityMarketService != null) {
+            plugin.getServer().getPluginManager().registerEvents(
+                    new me.scoltbr.scoltEconomys.commodity.CommodityMenuListener(commodityMenuService, commodityMarketService),
+                    plugin);
+
+            // Inicia News e Ticker
+            if (newsService != null) newsService.start();
+            
+            // Ticker de preços (Async) — a cada 1 minuto (1200 ticks)
+            Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, commodityMarketService::tick, 1200L, 1200L);
         }
     }
 

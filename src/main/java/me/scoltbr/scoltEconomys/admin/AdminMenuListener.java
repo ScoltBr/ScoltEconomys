@@ -1,15 +1,19 @@
 package me.scoltbr.scoltEconomys.admin;
 
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Material;
+import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 
 public final class AdminMenuListener implements Listener {
 
     private final AdminMenuService menus;
+    private static final MiniMessage MM = MiniMessage.miniMessage();
 
     public AdminMenuListener(AdminMenuService menus) {
         this.menus = menus;
@@ -24,11 +28,14 @@ public final class AdminMenuListener implements Listener {
 
         if (e.getCurrentItem() == null) return;
         Material type = e.getCurrentItem().getType();
+        
+        // Som padrão
+        p.playSound(p.getLocation(), Sound.UI_BUTTON_CLICK, 0.5f, 1.0f);
 
         switch (holder.page()) {
-            case MAIN -> handleMain(p, e.getInventory(), type);
-            case ALERTS -> handleAlerts(p, e.getInventory(), type);
-            case TAX -> handleTax(p, e, e.getInventory(), type);
+            case MAIN -> handleMain(p, e.getInventory(), type, e.getSlot());
+            case ALERTS -> handleAlerts(p, e.getInventory(), type, e.getSlot());
+            case TAX -> handleTax(p, e, e.getInventory(), type, e.getSlot());
         }
     }
 
@@ -38,79 +45,61 @@ public final class AdminMenuListener implements Listener {
             e.setCancelled(true);
         }
     }
+    
+    @EventHandler
+    public void onClose(InventoryCloseEvent e) {
+        if (e.getInventory().getHolder() instanceof AdminMenuHolder && e.getPlayer() instanceof Player player) {
+            menus.cancelLiveRefresh(player);
+        }
+    }
 
-    private void handleMain(Player p, org.bukkit.inventory.Inventory inv, Material type) {
-        if (type == Material.BARRIER) {
+    private void handleMain(Player p, org.bukkit.inventory.Inventory inv, Material type, int slot) {
+        if (slot == 53) {
             p.closeInventory();
             return;
         }
-        if (type == Material.ENDER_EYE) { // atualizar
-            menus.refresh(inv);
-            p.sendMessage("§bPainel atualizado.");
-            return;
-        }
 
-        if (type == Material.PAPER) {
+        if (slot == 46 || type == Material.PAPER) {
             menus.openTax(p);
             return;
         }
 
-        if (type == Material.BELL || type == Material.RED_DYE || type == Material.LIME_DYE) {
+        if (slot == 31 || slot == 48 || type == Material.BELL || type == Material.RED_DYE || type == Material.LIME_DYE) {
             menus.openAlerts(p);
         }
     }
 
-    private void handleAlerts(Player p, org.bukkit.inventory.Inventory inv, Material type) {
-        if (type == Material.BARRIER) {
+    private void handleAlerts(Player p, org.bukkit.inventory.Inventory inv, Material type, int slot) {
+        if (slot == 53) {
             p.closeInventory();
             return;
         }
-        if (type == Material.ENDER_EYE) {
-            menus.refresh(inv);
-            p.sendMessage("§bAlertas atualizados.");
-            return;
-        }
-        if (type == Material.ARROW) {
+        if (slot == 45) {
             menus.openMain(p);
         }
     }
 
-    private void handleTax(Player p, InventoryClickEvent e, org.bukkit.inventory.Inventory inv, Material type) {
-        if (type == Material.BARRIER) {
+    private void handleTax(Player p, InventoryClickEvent e, org.bukkit.inventory.Inventory inv, Material type, int slot) {
+        if (slot == 53) {
             p.closeInventory();
             return;
         }
-        if (type == Material.ARROW) {
+        if (slot == 45) {
             menus.openMain(p);
             return;
         }
-        if (type == Material.ENDER_EYE) {
-            menus.refresh(inv);
-            p.sendMessage("§bImpostos atualizados.");
-            return;
-        }
 
-        // Só responde aos cards de imposto
-        if (type != Material.LIME_TERRACOTTA && type != Material.RED_TERRACOTTA) return;
-        if (e.getCurrentItem() == null || !e.getCurrentItem().hasItemMeta()) return;
+        // Só responde aos cards de imposto (Slots 20 e 24)
+        if (slot != 20 && slot != 24) return;
 
-        var meta = e.getCurrentItem().getItemMeta();
-        if (meta == null || !meta.hasDisplayName()) return;
-
-        String name = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(meta.displayName());
-        boolean isTransfer = name.contains("Transfer");
-        boolean isWithdraw = name.contains("Saque");
-
-        if (!isTransfer && !isWithdraw) return;
-
-        var taxType = isTransfer
+        var taxType = (slot == 20)
                 ? me.scoltbr.scoltEconomys.tax.TaxType.TRANSFER
                 : me.scoltbr.scoltEconomys.tax.TaxType.WITHDRAW;
 
         // Q = toggle
         if (e.getClick() == org.bukkit.event.inventory.ClickType.DROP) {
             menus.toggleTax(p, taxType);
-            menus.refresh(inv);
+            menus.refreshSilently(inv);
             return;
         }
 
@@ -122,8 +111,7 @@ public final class AdminMenuListener implements Listener {
 
         if (delta != 0.0) {
             menus.adjustTaxRate(p, taxType, delta);
-            menus.refresh(inv);
+            menus.refreshSilently(inv);
         }
     }
-
 }
